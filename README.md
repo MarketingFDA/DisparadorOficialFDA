@@ -6,7 +6,7 @@ Frontend estático publicado em [marketingfda.github.io/DisparadorOficialFDA](ht
 
 ## Estrutura
 
-- `frontend/` — HTML/CSS/JS estático (sem build step), publicado via GitHub Pages.
+- `docs/` — frontend HTML/CSS/JS estático (sem build step), publicado via GitHub Pages (path `/docs` é um dos dois únicos suportados pelo Pages sem precisar de GitHub Actions).
 - `backend/` — NestJS + Prisma + Postgres, deploy via Railway.
 
 ## Rodando o backend localmente
@@ -14,7 +14,7 @@ Frontend estático publicado em [marketingfda.github.io/DisparadorOficialFDA](ht
 ```bash
 cd backend
 npm install
-cp .env.example .env   # preencher com as credenciais da Meta (ver docs/meta-setup.md)
+cp .env.example .env   # preencher com as credenciais da Meta (ver META_SETUP.md)
 npx prisma db push
 npm run start:dev
 ```
@@ -35,11 +35,11 @@ API sobe em `http://localhost:3001`.
 
 ## Rodando o frontend localmente
 
-`frontend/` é estático — basta abrir `index.html` num servidor local (ex: `npx serve frontend`) e ajustar `API_BASE_URL` em `frontend/assets/js/api.js` para `http://localhost:3001`.
+`docs/` é estático — basta abrir `index.html` num servidor local (ex: `npx serve docs`) e ajustar `API_BASE_URL` em `docs/assets/js/api.js` para `http://localhost:3001`.
 
 ## Configuração da Meta (WhatsApp Cloud API)
 
-Ver checklist completo em [`docs/meta-setup.md`](./docs/meta-setup.md).
+Ver checklist completo em [`META_SETUP.md`](./META_SETUP.md).
 
 ## Escopo do MVP
 
