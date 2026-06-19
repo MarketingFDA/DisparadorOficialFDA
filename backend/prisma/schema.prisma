@@ -1,0 +1,141 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TemplateStatus {
+  APPROVED
+  PENDING
+  REJECTED
+  PAUSED
+}
+
+enum CampaignStatus {
+  DRAFT
+  QUEUED
+  SENDING
+  PAUSED
+  COMPLETED
+  FAILED
+}
+
+enum MessageStatus {
+  PENDING
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+model WhatsAppNumber {
+  id            String     @id @default(cuid())
+  label         String
+  phoneNumberId String     @unique
+  wabaId        String
+  displayNumber String?
+  isTestNumber  Boolean    @default(true)
+  isActive      Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  templates     Template[]
+  campaigns     Campaign[]
+}
+
+model Template {
+  id                String         @id @default(cuid())
+  metaTemplateId    String?
+  name              String
+  language          String         @default("pt_BR")
+  category          String
+  status            TemplateStatus @default(PENDING)
+  bodyText          String
+  headerType        String?
+  footerText        String?
+  variablesCount    Int            @default(0)
+  rawPayload        Json?
+  whatsAppNumberId  String
+  whatsAppNumber    WhatsAppNumber @relation(fields: [whatsAppNumberId], references: [id])
+  campaigns         Campaign[]
+  syncedAt          DateTime       @default(now())
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@unique([whatsAppNumberId, name, language])
+}
+
+model ContactGroup {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  description String?
+  createdAt   DateTime   @default(now())
+  contacts    Contact[]
+  campaigns   Campaign[]
+}
+
+model Contact {
+  id               String            @id @default(cuid())
+  name             String
+  phone            String
+  email            String?
+  groupId          String?
+  group            ContactGroup?     @relation(fields: [groupId], references: [id])
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  campaignMessages CampaignMessage[]
+
+  @@unique([phone, groupId])
+  @@index([phone])
+}
+
+model Campaign {
+  id               String            @id @default(cuid())
+  name             String
+  status           CampaignStatus    @default(DRAFT)
+  whatsAppNumberId String
+  whatsAppNumber   WhatsAppNumber    @relation(fields: [whatsAppNumberId], references: [id])
+  templateId       String
+  template         Template          @relation(fields: [templateId], references: [id])
+  groupId          String
+  group            ContactGroup      @relation(fields: [groupId], references: [id])
+  scheduledAt      DateTime?
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  isFavoriteFilter Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  messages         CampaignMessage[]
+
+  totalCount     Int @default(0)
+  queuedCount    Int @default(0)
+  sentCount      Int @default(0)
+  deliveredCount Int @default(0)
+  readCount      Int @default(0)
+  errorCount     Int @default(0)
+}
+
+model CampaignMessage {
+  id            String        @id @default(cuid())
+  campaignId    String
+  campaign      Campaign      @relation(fields: [campaignId], references: [id])
+  contactId     String
+  contact       Contact       @relation(fields: [contactId], references: [id])
+  status        MessageStatus @default(PENDING)
+  metaMessageId String?       @unique
+  errorCode     String?
+  errorMessage  String?
+  queuedAt      DateTime?
+  sentAt        DateTime?
+  deliveredAt   DateTime?
+  readAt        DateTime?
+  failedAt      DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([campaignId, status])
+  @@index([metaMessageId])
+}

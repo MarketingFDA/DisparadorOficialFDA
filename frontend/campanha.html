@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nova campanha — Disparador Fradema</title>
+<link rel="stylesheet" href="assets/css/styles.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+</head>
+<body>
+<div class="bg-blobs" aria-hidden="true">
+  <span class="blob blob-1"></span>
+  <span class="blob blob-2"></span>
+  <span class="blob blob-3"></span>
+</div>
+
+<header class="topbar glass">
+  <div class="brand">
+    <span class="brand-dot"></span>
+    <span>Disparador Fradema</span>
+  </div>
+  <nav class="tabs">
+    <a class="tab" href="index.html">Campanhas</a>
+    <a class="tab active" href="campanha.html">Nova campanha</a>
+  </nav>
+</header>
+
+<main class="page page-narrow">
+  <section class="panel glass form-panel">
+    <div class="panel-header">
+      <h1>Nova campanha</h1>
+    </div>
+
+    <form id="campaign-form" class="form-grid">
+      <label class="field">
+        <span>Nome do template</span>
+        <input type="text" id="campaign-name" placeholder="Ex: Saia da mira da RFB RJ" required />
+      </label>
+
+      <label class="field">
+        <span>Número (WhatsApp Business)</span>
+        <select id="campaign-number" required></select>
+      </label>
+
+      <label class="field">
+        <span>Idioma</span>
+        <div class="static-pill">🇧🇷 Português (Brasil)</div>
+      </label>
+
+      <label class="field">
+        <span>Template aprovado</span>
+        <select id="campaign-template" required></select>
+      </label>
+
+      <label class="field">
+        <span>Grupo de destinatários</span>
+        <select id="campaign-group" required></select>
+      </label>
+
+      <div class="field">
+        <span>Importar destinatários (opcional)</span>
+        <div class="import-box" id="import-box">
+          <p>Utilize arquivo em excel no formato xlsx para a importação.</p>
+          <p class="hint">A estrutura do arquivo deve ter:</p>
+          <ul class="hint-list">
+            <li><strong>Coluna A:</strong> Nome do destinatário</li>
+            <li><strong>Coluna B:</strong> Telefone (DDD+TELEFONE, juntos — ex: 1155650011)</li>
+            <li><strong>Coluna C:</strong> Email</li>
+          </ul>
+          <input type="text" id="import-group-name" placeholder="Nome do novo grupo (se não selecionou um acima)" />
+          <input type="file" id="import-file" accept=".xlsx" />
+          <button type="button" class="btn btn-secondary" id="import-btn">⇧ Importar</button>
+          <p class="import-result" id="import-result"></p>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <a href="index.html" class="btn btn-ghost">Cancelar</a>
+        <button type="submit" class="btn btn-primary">Criar campanha</button>
+      </div>
+    </form>
+  </section>
+</main>
+
+<div class="toast-stack" id="toast-stack"></div>
+
+<script src="assets/js/api.js"></script>
+<script src="assets/js/importar.js"></script>
+<script src="assets/js/campanha-form.js"></script>
+</body>
+</html>

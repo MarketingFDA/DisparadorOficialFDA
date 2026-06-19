@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Disparador Fradema — Campanhas WhatsApp</title>
+<link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body>
+<div class="bg-blobs" aria-hidden="true">
+  <span class="blob blob-1"></span>
+  <span class="blob blob-2"></span>
+  <span class="blob blob-3"></span>
+</div>
+
+<header class="topbar glass">
+  <div class="brand">
+    <span class="brand-dot"></span>
+    <span>Disparador Fradema</span>
+  </div>
+  <nav class="tabs">
+    <a class="tab active" href="index.html">Campanhas</a>
+    <a class="tab" href="campanha.html">Nova campanha</a>
+  </nav>
+</header>
+
+<main class="page">
+  <section class="panel glass">
+    <div class="panel-header">
+      <h1>Campanhas por WhatsApp</h1>
+      <div class="panel-actions">
+        <div class="search-box">
+          <input id="search-input" type="text" placeholder="Busca rápida" />
+        </div>
+
+        <div class="dropdown" id="acoes-dropdown">
+          <button class="btn btn-primary" id="acoes-btn">Ações ▾</button>
+          <div class="dropdown-menu" id="acoes-menu">
+            <button data-action="adicionar">＋ Adicionar</button>
+            <button data-action="sincronizar">⟳ Sincronizar</button>
+            <hr />
+            <button data-action="filtro-avancado">▽ Filtro Avançado</button>
+            <button data-action="limpar-filtro">✕ Limpar filtro atual</button>
+            <button data-action="favoritar-filtro">☆ Favoritar filtro</button>
+            <button data-action="remover-favorito">★ Remover Favorito</button>
+            <hr />
+            <button data-action="excluir-selecionados" class="danger">🗑 Excluir Selecionados</button>
+            <button data-action="excluir-todos" class="danger">🗑 Excluir Todos</button>
+          </div>
+        </div>
+
+        <div class="dropdown" id="exportar-dropdown">
+          <button class="btn btn-secondary" id="exportar-btn">⇩ Exportar ▾</button>
+          <div class="dropdown-menu" id="exportar-menu">
+            <button data-export="print">🖨 Imprimir</button>
+            <button data-export="csv">📄 Csv</button>
+            <button data-export="xlsx">📊 Xlsx</button>
+            <button data-export="pdf">📕 Pdf</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th class="col-check"><input type="checkbox" id="select-all" /></th>
+            <th>Status</th>
+            <th>Nome</th>
+            <th>Número</th>
+            <th>Template</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="campaigns-tbody">
+          <tr><td colspan="6" class="empty-state">Carregando campanhas…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="table-footer">
+      <span id="campaigns-count">Mostrando 0 registros</span>
+    </div>
+  </section>
+
+  <section class="panel glass">
+    <div class="panel-header">
+      <h2>Estatísticas das campanhas</h2>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Campanha</th>
+            <th>Total</th>
+            <th>Fila Envio</th>
+            <th>Enviados</th>
+            <th>Entregues</th>
+            <th>Lidos</th>
+            <th>Error</th>
+          </tr>
+        </thead>
+        <tbody id="stats-tbody">
+          <tr><td colspan="7" class="empty-state">Carregando estatísticas…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<div class="modal-backdrop" id="modal-backdrop"></div>
+<div class="modal glass" id="confirm-modal">
+  <h3 id="confirm-title">Confirmar ação</h3>
+  <p id="confirm-message"></p>
+  <div class="modal-actions">
+    <button class="btn btn-ghost" id="confirm-cancel">Cancelar</button>
+    <button class="btn btn-danger" id="confirm-ok">Confirmar</button>
+  </div>
+</div>
+
+<div class="toast-stack" id="toast-stack"></div>
+
+<script src="assets/js/api.js"></script>
+<script src="assets/js/export.js"></script>
+<script src="assets/js/campanhas.js"></script>
+</body>
+</html>
