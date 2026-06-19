@@ -29,11 +29,11 @@ Em **WhatsApp > API Setup > To**, adicione e verifique (via código SMS/chamada)
 
 ## 5. Configurar o Webhook
 
-Só depois que o backend estiver publicado no Railway (URL pública HTTPS):
+Só depois que o backend estiver publicado no Render (URL pública HTTPS):
 
 1. Escolha um `META_WEBHOOK_VERIFY_TOKEN` (qualquer string secreta) e configure essa mesma string como variável de ambiente no backend.
 2. No painel do app, em **WhatsApp > Configuration > Webhook**, clique em editar e informe:
-   - **Callback URL**: `https://<seu-backend>.up.railway.app/webhooks/meta`
+   - **Callback URL**: `https://disparador-fradema-backend.onrender.com/webhooks/meta`
    - **Verify Token**: o mesmo valor de `META_WEBHOOK_VERIFY_TOKEN`
 3. Inscreva o campo **messages** (cobre mensagens recebidas e atualizações de status: sent/delivered/read/failed).
 
