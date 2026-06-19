@@ -1,6 +1,7 @@
-// Ponto único de configuração da URL do backend (Railway).
-// Troque pelo domínio público real depois do deploy do backend.
-const API_BASE_URL = window.__DISPARADOR_API_BASE_URL__ || 'http://localhost:3001';
+// Ponto único de configuração da URL do backend (Render).
+// Pode ser sobrescrito via window.__DISPARADOR_API_BASE_URL__ antes deste script carregar.
+// Ajuste o valor abaixo se o Render gerar uma URL diferente da esperada.
+const API_BASE_URL = window.__DISPARADOR_API_BASE_URL__ || 'https://disparador-fradema-backend.onrender.com';
 
 async function apiRequest(path, options = {}) {
   const res = await fetch(`${API_BASE_URL}${path}`, {

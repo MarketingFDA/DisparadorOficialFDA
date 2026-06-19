@@ -2,12 +2,20 @@
 
 MVP do módulo "Campanhas por WhatsApp": disparo de campanhas em massa via Meta Cloud API (WhatsApp oficial), com acompanhamento de estatísticas de entrega/leitura em tempo quase real.
 
-Frontend estático publicado em [marketingfda.github.io/DisparadorOficialFDA](https://marketingfda.github.io/DisparadorOficialFDA), consumindo uma API backend hospedada no Railway.
+Frontend estático publicado em [marketingfda.github.io/DisparadorOficialFDA](https://marketingfda.github.io/DisparadorOficialFDA), consumindo uma API backend hospedada na nuvem (Render).
 
 ## Estrutura
 
 - `docs/` — frontend HTML/CSS/JS estático (sem build step), publicado via GitHub Pages (path `/docs` é um dos dois únicos suportados pelo Pages sem precisar de GitHub Actions).
-- `backend/` — NestJS + Prisma + Postgres, deploy via Railway.
+- `backend/` — NestJS + Prisma + Postgres, deploy via Render (Blueprint em `render.yaml` na raiz). Também tem `railway.json`/`nixpacks.toml` prontos caso o projeto migre para Railway no futuro (era o plano original, mas a conta Railway em uso bateu o limite de provisionamento do plano gratuito).
+
+## Deploy do backend (Render)
+
+1. Acesse [dashboard.render.com](https://dashboard.render.com) e faça login/crie uma conta.
+2. **New +** → **Blueprint** → conecte o repositório `MarketingFDA/DisparadorOficialFDA`.
+3. O Render lê o `render.yaml` da raiz e provisiona automaticamente: o serviço web (`disparador-fradema-backend`, Docker) e o Postgres (`disparador-fradema-db`), já conectados via `DATABASE_URL`.
+4. Depois de criado, vá em **Environment** do serviço web e preencha manualmente (não vêm no Blueprint por segurança): `META_ACCESS_TOKEN`, `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN` (ver [`META_SETUP.md`](./META_SETUP.md)).
+5. Copie a URL pública gerada (algo como `https://disparador-fradema-backend.onrender.com`) e atualize `API_BASE_URL` em [`docs/assets/js/api.js`](./docs/assets/js/api.js).
 
 ## Rodando o backend localmente
 
