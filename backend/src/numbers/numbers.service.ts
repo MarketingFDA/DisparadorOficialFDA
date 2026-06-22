@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EvolutionApiService } from '../whatsapp/evolution-api.service';
 import { Channel } from '@prisma/client';
@@ -17,6 +17,8 @@ export interface CreateNumberInput {
 
 @Injectable()
 export class NumbersService {
+  private readonly logger = new Logger(NumbersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly evolution: EvolutionApiService,
@@ -56,6 +58,30 @@ export class NumbersService {
         evolutionInstanceName: data.channel === Channel.EVOLUTION_API ? data.evolutionInstanceName : undefined,
       },
     });
+  }
+
+  async remove(id: string) {
+    const number = await this.prisma.whatsAppNumber.findUnique({ where: { id } });
+    if (!number) throw new NotFoundException('Número não encontrado');
+
+    const [campaignsCount, templatesCount] = await Promise.all([
+      this.prisma.campaign.count({ where: { whatsAppNumberId: id } }),
+      this.prisma.template.count({ where: { whatsAppNumberId: id } }),
+    ]);
+    if (campaignsCount > 0 || templatesCount > 0) {
+      throw new BadRequestException('Esse número tem campanhas ou templates vinculados — remova-os antes de excluir o número');
+    }
+
+    if (number.channel === Channel.EVOLUTION_API && number.evolutionInstanceName) {
+      try {
+        await this.evolution.deleteInstance(number.evolutionInstanceName);
+      } catch (err: any) {
+        this.logger.warn(`Falha ao remover instância "${number.evolutionInstanceName}" na Evolution API: ${err?.message}`);
+      }
+    }
+
+    await this.prisma.whatsAppNumber.delete({ where: { id } });
+    return { deleted: true };
   }
 
   async getQrCode(id: string) {

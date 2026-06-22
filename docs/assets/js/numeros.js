@@ -82,9 +82,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const statusCell = isMeta
                   ? '<span class="field-hint">—</span>'
                   : `<span class="badge" data-status-for="${n.id}">verificando…</span>`;
-                const actionsCell = isMeta
-                  ? '—'
-                  : `<button type="button" class="btn btn-secondary btn-connect" data-id="${n.id}">Conectar</button>`;
+                const connectBtn = isMeta ? '' : `<button type="button" class="btn btn-secondary btn-connect" data-id="${n.id}">Conectar</button>`;
+                const actionsCell = `${connectBtn}<button type="button" class="btn btn-ghost btn-remove" data-id="${n.id}" data-label="${escapeHtml(n.label)}">Excluir</button>`;
                 return `
                   <tr>
                     <td><span class="badge ${badgeClass}">${badgeLabel}</span></td>
@@ -101,6 +100,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       tbody.querySelectorAll('.btn-connect').forEach((btn) => {
         btn.addEventListener('click', () => openQrModal(btn.dataset.id));
+      });
+
+      tbody.querySelectorAll('.btn-remove').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          if (!confirm(`Excluir o número "${btn.dataset.label}"? Essa ação não pode ser desfeita.`)) return;
+          try {
+            await api.numbers.remove(btn.dataset.id);
+            showToast('Número excluído.', 'success');
+            await loadNumbers();
+          } catch (err) {
+            showToast(`Erro ao excluir: ${err.message}`, 'error');
+          }
+        });
       });
 
       numbers
