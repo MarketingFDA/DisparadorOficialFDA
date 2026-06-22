@@ -43,10 +43,12 @@
             <th>Número</th>
             <th>Identificador</th>
             <th>Tipo</th>
+            <th>Status</th>
+            <th>Ações</th>
           </tr>
         </thead>
         <tbody id="numbers-tbody">
-          <tr><td colspan="5" class="empty-state">Carregando números…</td></tr>
+          <tr><td colspan="7" class="empty-state">Carregando números…</td></tr>
         </tbody>
       </table>
     </div>
@@ -99,10 +101,10 @@
         <label class="field">
           <span>Nome da instância (Evolution API)</span>
           <input type="text" id="numero-instance" placeholder="Ex: fradema-comercial" />
-          <span class="field-hint">Precisa já existir e estar conectada (QR Code escaneado) na sua Evolution API.</span>
+          <span class="field-hint">A instância é criada automaticamente ao salvar — depois é só escanear o QR Code que aparece na tela.</span>
         </label>
         <div class="warning-box">
-          ⚠️ Canal não-oficial. Os disparos são espaçados em 10s entre cada mensagem para reduzir o risco de bloqueio, mas o WhatsApp pode banir o número a qualquer momento — não há garantia. Use só com contatos que já têm relacionamento com a Fradema. Veja <code>EVOLUTION_SETUP.md</code> no repositório para configurar a URL pública da sua instância.
+          ⚠️ Canal não-oficial. Os disparos são espaçados em 10s entre cada mensagem para reduzir o risco de bloqueio, mas o WhatsApp pode banir o número a qualquer momento — não há garantia. Use só com contatos que já têm relacionamento com a Fradema.
         </div>
       </div>
 
@@ -113,6 +115,18 @@
     </form>
   </section>
 </main>
+
+<div class="modal-backdrop" id="qrcode-backdrop"></div>
+<div class="modal glass" id="qrcode-modal">
+  <h3>Conectar WhatsApp</h3>
+  <p id="qrcode-status">Abra o WhatsApp no celular do número, vá em Aparelhos conectados → Conectar um aparelho e escaneie o código abaixo.</p>
+  <div class="qrcode-box" id="qrcode-box">
+    <div class="empty-state">Gerando QR Code…</div>
+  </div>
+  <div class="modal-actions">
+    <button class="btn btn-ghost" id="qrcode-close">Fechar</button>
+  </div>
+</div>
 
 <div class="toast-stack" id="toast-stack"></div>
 

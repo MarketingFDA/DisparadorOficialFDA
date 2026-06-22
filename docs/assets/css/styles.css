@@ -115,9 +115,14 @@ html, body {
 .page-narrow { max-width: 720px; }
 
 .panel {
+  position: relative;
+  z-index: 1;
   border-radius: var(--radius-lg);
   padding: 24px;
 }
+/* backdrop-filter cria stacking context próprio em cada .panel — sem isso,
+   o dropdown de um painel fica preso atrás do painel seguinte no DOM. */
+.panel:has(.dropdown-menu.open) { z-index: 30; }
 
 .panel-header {
   display: flex;
@@ -395,6 +400,23 @@ html, body {
 
 .badge-channel-meta { background: rgba(14, 165, 233, 0.18); color: #5fd0ff; }
 .badge-channel-evolution { background: rgba(245, 158, 11, 0.18); color: #ffce6b; }
+.badge-status-open { background: rgba(37, 211, 102, 0.18); color: #6df0a4; }
+.badge-status-connecting { background: rgba(245, 158, 11, 0.18); color: #ffce6b; }
+.badge-status-close { background: rgba(241, 92, 92, 0.18); color: #ff8585; }
+
+#qrcode-modal { width: 90%; max-width: 360px; text-align: center; }
+.qrcode-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  background: #fff;
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin: 0 auto 16px;
+}
+.qrcode-box img { width: 100%; height: auto; display: block; }
+.qrcode-box .empty-state { color: var(--text-3); }
 
 @media (max-width: 720px) {
   .topbar { flex-direction: column; gap: 12px; align-items: stretch; }

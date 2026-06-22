@@ -46,6 +46,8 @@ const api = {
   numbers: {
     list: () => apiRequest('/numbers'),
     create: (body) => apiRequest('/numbers', { method: 'POST', body: JSON.stringify(body) }),
+    qrcode: (id) => apiRequest(`/numbers/${id}/qrcode`),
+    status: (id) => apiRequest(`/numbers/${id}/status`),
   },
   contacts: {
     groups: () => apiRequest('/contacts/groups'),

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { NumbersService } from './numbers.service';
 import type { CreateNumberInput } from './numbers.service';
 
@@ -14,5 +14,15 @@ export class NumbersController {
   @Post()
   create(@Body() body: CreateNumberInput) {
     return this.numbersService.create(body);
+  }
+
+  @Get(':id/qrcode')
+  getQrCode(@Param('id') id: string) {
+    return this.numbersService.getQrCode(id);
+  }
+
+  @Get(':id/status')
+  getStatus(@Param('id') id: string) {
+    return this.numbersService.getConnectionState(id);
   }
 }

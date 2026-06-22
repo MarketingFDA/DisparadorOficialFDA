@@ -11,6 +11,15 @@ export interface SendTextResult {
   externalMessageId: string;
 }
 
+export interface QrCodeResult {
+  base64: string | null;
+  pairingCode: string | null;
+}
+
+export interface ConnectionStateResult {
+  state: 'open' | 'connecting' | 'close' | string;
+}
+
 // Cliente para a Evolution API (WhatsApp não-oficial, via Baileys).
 // Diferente da Meta Cloud API: roda numa instância própria (ex: Docker local
 // exposto por túnel) configurada em EVOLUTION_API_URL/EVOLUTION_API_KEY.
@@ -50,5 +59,34 @@ export class EvolutionApiService {
       throw new Error('Evolution API não retornou um id de mensagem');
     }
     return { externalMessageId };
+  }
+
+  private requireClient(): AxiosInstance {
+    if (!this.client) {
+      throw new Error('EVOLUTION_API_URL não configurada no backend — ver EVOLUTION_SETUP.md');
+    }
+    return this.client;
+  }
+
+  async createInstance(instanceName: string): Promise<void> {
+    await this.requireClient().post('/instance/create', {
+      instanceName,
+      qrcode: true,
+      integration: 'WHATSAPP-BAILEYS',
+    });
+  }
+
+  async deleteInstance(instanceName: string): Promise<void> {
+    await this.requireClient().delete(`/instance/delete/${instanceName}`);
+  }
+
+  async getQrCode(instanceName: string): Promise<QrCodeResult> {
+    const { data } = await this.requireClient().get(`/instance/connect/${instanceName}`);
+    return { base64: data?.base64 ?? null, pairingCode: data?.pairingCode ?? null };
+  }
+
+  async getConnectionState(instanceName: string): Promise<ConnectionStateResult> {
+    const { data } = await this.requireClient().get(`/instance/connectionState/${instanceName}`);
+    return { state: data?.instance?.state ?? 'close' };
   }
 }
