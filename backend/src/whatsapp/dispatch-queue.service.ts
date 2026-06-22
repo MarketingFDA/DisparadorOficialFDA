@@ -5,23 +5,55 @@ import { WhatsappApiService } from './whatsapp-api.service';
 import { EvolutionApiService } from './evolution-api.service';
 import { CampaignStatus, Channel, MessageStatus } from '@prisma/client';
 
-// Lote pequeno processado a cada tick, espaçado por um delay entre envios.
 // Meta Cloud API: rate limit é por throughput de conversas, não por timing entre
-// chamadas — 1.2s é só uma folga conservadora.
-// Evolution API (número normal, não-oficial): delay de 10s entre cada envio,
-// para reduzir a chance de o WhatsApp detectar padrão de disparo em massa.
-// Mesmo assim NÃO há garantia: número normal pode ser banido pelo WhatsApp a
-// qualquer momento nesse canal — ver EVOLUTION_SETUP.md.
-const BATCH_SIZE = 5;
-const DELAY_BETWEEN_SENDS_MS: Record<Channel, number> = {
-  META_CLOUD_API: 1200,
-  EVOLUTION_API: 10000,
+// chamadas — lote pequeno com 1.2s de folga entre envios é só conservador.
+const META_BATCH_SIZE = 5;
+const META_DELAY_MS = 1200;
+
+// Evolution API (número normal, não-oficial): pausa adaptativa por volume de
+// mensagens já enviadas HOJE por aquele número — quanto mais mensagens, maior o
+// intervalo entre envios, simulando um padrão mais humano. Mesmo assim NÃO há
+// garantia: o número pode ser banido pelo WhatsApp a qualquer momento nesse
+// canal — ver EVOLUTION_SETUP.md. Os limiares abaixo são um ponto de partida
+// conservador, ajustável conforme a experiência de uso real.
+interface EvolutionTier {
+  upTo: number; // tier se aplica enquanto sentToday <= upTo
+  minDelayMs: number;
+  maxDelayMs: number;
+}
+const EVOLUTION_TIERS: EvolutionTier[] = [
+  { upTo: 20, minDelayMs: 10_000, maxDelayMs: 18_000 }, // até 20 msgs/dia: 10-18s entre envios
+  { upTo: 50, minDelayMs: 20_000, maxDelayMs: 30_000 }, // 21-50 msgs/dia: 20-30s
+  { upTo: 100, minDelayMs: 35_000, maxDelayMs: 50_000 }, // 51-100 msgs/dia: 35-50s
+  { upTo: Infinity, minDelayMs: 60_000, maxDelayMs: 90_000 }, // acima de 100/dia: 60-90s
+];
+
+// Pausas extras ("descanso") ao cruzar marcos de mensagens enviadas no dia.
+// Acima de 100, repete a pausa de 100 a cada 100 mensagens (200, 300, ...).
+const EVOLUTION_CHECKPOINTS: { at: number; minMs: number; maxMs: number }[] = [
+  { at: 20, minMs: 2 * 60_000, maxMs: 4 * 60_000 },
+  { at: 50, minMs: 8 * 60_000, maxMs: 12 * 60_000 },
+  { at: 100, minMs: 20 * 60_000, maxMs: 30 * 60_000 },
+];
+
+type CampaignWithRelations = {
+  id: string;
+  whatsAppNumberId: string;
+  whatsAppNumber: { channel: Channel; phoneNumberId: string | null; evolutionInstanceName: string | null };
+  template: { name: string; language: string } | null;
+  messageText: string | null;
 };
 
 @Injectable()
 export class DispatchQueueService {
   private readonly logger = new Logger(DispatchQueueService.name);
   private processing = false;
+
+  // Próximo horário permitido de envio por número do canal Evolution (em memória —
+  // some num restart do processo; na pior hipótese isso só faz um envio sair um
+  // pouco mais cedo logo após o backend reiniciar, o tier de delay em si continua
+  // correto pois é recalculado a partir do banco a cada envio).
+  private readonly nextAllowedSendAt = new Map<string, number>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -49,42 +81,99 @@ export class DispatchQueueService {
     });
 
     for (const campaign of campaigns) {
-      const pending = await this.prisma.campaignMessage.findMany({
-        where: { campaignId: campaign.id, status: MessageStatus.PENDING },
-        include: { contact: true },
-        take: BATCH_SIZE,
-      });
-
-      if (pending.length === 0) {
-        const remaining = await this.prisma.campaignMessage.count({
-          where: { campaignId: campaign.id, status: MessageStatus.PENDING },
-        });
-        if (remaining === 0) {
-          await this.prisma.campaign.update({
-            where: { id: campaign.id },
-            data: { status: CampaignStatus.COMPLETED, finishedAt: new Date() },
-          });
-        }
-        continue;
-      }
-
-      const delay = DELAY_BETWEEN_SENDS_MS[campaign.whatsAppNumber.channel];
-      for (const message of pending) {
-        await this.sendOne(campaign, message);
-        await this.sleep(delay);
+      if (campaign.whatsAppNumber.channel === Channel.EVOLUTION_API) {
+        await this.processEvolutionCampaign(campaign);
+      } else {
+        await this.processMetaCampaign(campaign);
       }
     }
   }
 
-  private async sendOne(
-    campaign: {
-      id: string;
-      whatsAppNumber: { channel: Channel; phoneNumberId: string | null; evolutionInstanceName: string | null };
-      template: { name: string; language: string } | null;
-      messageText: string | null;
-    },
-    message: { id: string; contact: { phone: string; name: string } },
-  ) {
+  // Canal Meta: processa em lote pequeno, delay curto fixo (rate limit é da Meta).
+  private async processMetaCampaign(campaign: CampaignWithRelations) {
+    const pending = await this.prisma.campaignMessage.findMany({
+      where: { campaignId: campaign.id, status: MessageStatus.PENDING },
+      include: { contact: true },
+      take: META_BATCH_SIZE,
+    });
+
+    if (pending.length === 0) {
+      await this.completeCampaignIfDone(campaign.id);
+      return;
+    }
+
+    for (const message of pending) {
+      await this.sendOne(campaign, message);
+      await this.sleep(META_DELAY_MS);
+    }
+  }
+
+  // Canal Evolution: no máximo 1 envio por tick por número, respeitando a pausa
+  // adaptativa calculada após o envio anterior — não bloqueia outras campanhas
+  // (inclusive Meta) enquanto está "descansando".
+  private async processEvolutionCampaign(campaign: CampaignWithRelations) {
+    const nextAllowed = this.nextAllowedSendAt.get(campaign.whatsAppNumberId) ?? 0;
+    if (Date.now() < nextAllowed) return;
+
+    const message = await this.prisma.campaignMessage.findFirst({
+      where: { campaignId: campaign.id, status: MessageStatus.PENDING },
+      include: { contact: true },
+    });
+
+    if (!message) {
+      await this.completeCampaignIfDone(campaign.id);
+      return;
+    }
+
+    await this.sendOne(campaign, message);
+
+    const sentToday = await this.countSentTodayForNumber(campaign.whatsAppNumberId);
+    const delay = this.delayForEvolutionCount(sentToday);
+    this.nextAllowedSendAt.set(campaign.whatsAppNumberId, Date.now() + delay);
+  }
+
+  private async completeCampaignIfDone(campaignId: string) {
+    const remaining = await this.prisma.campaignMessage.count({
+      where: { campaignId, status: MessageStatus.PENDING },
+    });
+    if (remaining === 0) {
+      await this.prisma.campaign.update({
+        where: { id: campaignId },
+        data: { status: CampaignStatus.COMPLETED, finishedAt: new Date() },
+      });
+    }
+  }
+
+  private async countSentTodayForNumber(whatsAppNumberId: string): Promise<number> {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    return this.prisma.campaignMessage.count({
+      where: {
+        campaign: { whatsAppNumberId },
+        OR: [{ sentAt: { gte: startOfDay } }, { failedAt: { gte: startOfDay } }],
+      },
+    });
+  }
+
+  private delayForEvolutionCount(sentToday: number): number {
+    const tier = EVOLUTION_TIERS.find((t) => sentToday <= t.upTo) ?? EVOLUTION_TIERS[EVOLUTION_TIERS.length - 1];
+    let delay = this.randomBetween(tier.minDelayMs, tier.maxDelayMs);
+
+    for (const checkpoint of EVOLUTION_CHECKPOINTS) {
+      const crossed =
+        sentToday === checkpoint.at || (checkpoint.at === 100 && sentToday > 100 && sentToday % 100 === 0);
+      if (crossed) {
+        delay += this.randomBetween(checkpoint.minMs, checkpoint.maxMs);
+      }
+    }
+    return delay;
+  }
+
+  private randomBetween(min: number, max: number): number {
+    return Math.floor(min + Math.random() * (max - min));
+  }
+
+  private async sendOne(campaign: CampaignWithRelations, message: { id: string; contact: { phone: string; name: string } }) {
     try {
       const externalMessageId =
         campaign.whatsAppNumber.channel === Channel.META_CLOUD_API

@@ -4,7 +4,7 @@ Esse canal usa a **Evolution API** (automação não-oficial sobre o WhatsApp We
 
 ## Leia antes de usar
 
-- Esse canal **não é o WhatsApp Business Platform oficial**. O WhatsApp pode banir o número a qualquer momento se detectar padrão de disparo em massa — o delay de 10s entre mensagens (configurado em `backend/src/whatsapp/dispatch-queue.service.ts`) reduz o risco, mas **não elimina**.
+- Esse canal **não é o WhatsApp Business Platform oficial**. O WhatsApp pode banir o número a qualquer momento se detectar padrão de disparo em massa — a pausa adaptativa entre mensagens (configurada em `backend/src/whatsapp/dispatch-queue.service.ts`) reduz o risco, mas **não elimina**.
 - Use só com contatos que já têm relacionamento com a Fradema (clientes, leads que pediram contato). Não é recomendado para listas frias.
 - Se o número cadastrado for usado por alguém no dia a dia (WhatsApp Web aberto, app no celular), evite rodar disparos simultâneos — pode gerar conflito de sessão.
 
@@ -54,6 +54,21 @@ Na tela **Números**, clique em "Novo número", escolha o canal **WhatsApp Norma
 - Nome da instância (o mesmo do passo 1)
 
 Pronto — esse número já aparece como opção ao criar uma campanha no canal "WhatsApp Normal".
+
+## Pausa adaptativa entre envios (anti-bloqueio)
+
+O canal Evolution não usa um delay fixo — a pausa entre mensagens cresce conforme o volume já enviado **naquele número, no dia** (contagem zera à meia-noite), por nível:
+
+| Mensagens enviadas hoje (nesse número) | Pausa entre cada envio |
+|---|---|
+| até 20 | 10-18s |
+| 21-50 | 20-30s |
+| 51-100 | 35-50s |
+| acima de 100 | 60-90s |
+
+Além disso, ao cruzar 20, 50 e 100 mensagens no dia, entra uma pausa extra única ("descanso"): +2-4min em 20, +8-12min em 50, +20-30min em 100 (e a cada 100 adicionais). Os valores têm uma pequena variação aleatória (jitter) para não ficar um padrão robótico idêntico. Tudo isso é por **número** (`whatsAppNumberId`), não por campanha — se duas campanhas usarem o mesmo número, elas dividem a mesma pausa.
+
+Os limiares estão em `EVOLUTION_TIERS`/`EVOLUTION_CHECKPOINTS` no topo de `backend/src/whatsapp/dispatch-queue.service.ts` — são só uma referência inicial conservadora, ajustáveis conforme a experiência de uso real.
 
 ## Limitações conhecidas dessa primeira versão
 
