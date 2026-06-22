@@ -64,11 +64,16 @@ O canal Evolution não usa um delay fixo — a pausa entre mensagens cresce conf
 | até 20 | 10-18s |
 | 21-50 | 20-30s |
 | 51-100 | 35-50s |
-| acima de 100 | 60-90s |
+| 101-300 | 1-1,5min |
+| 301-600 | 1,5-2,5min |
+| 601-1000 | 2,5-4min |
+| acima de 1000 | 4-6min |
 
-Além disso, ao cruzar 20, 50 e 100 mensagens no dia, entra uma pausa extra única ("descanso"): +2-4min em 20, +8-12min em 50, +20-30min em 100 (e a cada 100 adicionais). Os valores têm uma pequena variação aleatória (jitter) para não ficar um padrão robótico idêntico. Tudo isso é por **número** (`whatsAppNumberId`), não por campanha — se duas campanhas usarem o mesmo número, elas dividem a mesma pausa.
+Além disso, ao cruzar 20, 50, 100, 300, 600 e 1000 mensagens no dia, entra uma pausa extra única ("descanso"): de +2-4min (em 20) até +150-240min / 2,5-4h (em 1000) — acima de 1000, essa pausa de 2,5-4h se repete a cada 500 mensagens adicionais (1500, 2000...) como rede de segurança. Os valores têm uma pequena variação aleatória (jitter) para não ficar um padrão robótico idêntico. Tudo isso é por **número** (`whatsAppNumberId`), não por campanha — se duas campanhas usarem o mesmo número, elas dividem a mesma pausa.
 
 Os limiares estão em `EVOLUTION_TIERS`/`EVOLUTION_CHECKPOINTS` no topo de `backend/src/whatsapp/dispatch-queue.service.ts` — são só uma referência inicial conservadora, ajustáveis conforme a experiência de uso real.
+
+**Importante sobre volumes de centenas/milhares por dia:** pacing reduz o risco de detecção por padrão de tempo, mas o WhatsApp também considera taxa de bloqueio/denúncia de quem recebe, conteúdo repetido, idade do número, entre outros sinais. Em volumes de 100-1000 mensagens/dia num número pessoal/comum, o risco de banimento é real mesmo com esse escalonamento — não há configuração de delay que torne isso "seguro". Para volume alto e previsível, o canal Meta Oficial (que não tem esse risco, mas exige template aprovado) é a opção mais adequada.
 
 ## Limitações conhecidas dessa primeira versão
 

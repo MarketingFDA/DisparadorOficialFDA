@@ -25,15 +25,22 @@ const EVOLUTION_TIERS: EvolutionTier[] = [
   { upTo: 20, minDelayMs: 10_000, maxDelayMs: 18_000 }, // até 20 msgs/dia: 10-18s entre envios
   { upTo: 50, minDelayMs: 20_000, maxDelayMs: 30_000 }, // 21-50 msgs/dia: 20-30s
   { upTo: 100, minDelayMs: 35_000, maxDelayMs: 50_000 }, // 51-100 msgs/dia: 35-50s
-  { upTo: Infinity, minDelayMs: 60_000, maxDelayMs: 90_000 }, // acima de 100/dia: 60-90s
+  { upTo: 300, minDelayMs: 60_000, maxDelayMs: 90_000 }, // 101-300 msgs/dia: 1-1.5min
+  { upTo: 600, minDelayMs: 90_000, maxDelayMs: 150_000 }, // 301-600 msgs/dia: 1.5-2.5min
+  { upTo: 1000, minDelayMs: 150_000, maxDelayMs: 240_000 }, // 601-1000 msgs/dia: 2.5-4min
+  { upTo: Infinity, minDelayMs: 240_000, maxDelayMs: 360_000 }, // acima de 1000/dia: 4-6min
 ];
 
 // Pausas extras ("descanso") ao cruzar marcos de mensagens enviadas no dia.
-// Acima de 100, repete a pausa de 100 a cada 100 mensagens (200, 300, ...).
-const EVOLUTION_CHECKPOINTS: { at: number; minMs: number; maxMs: number }[] = [
+// O marco de 1000 se repete a cada 500 mensagens adicionais (1500, 2000, ...)
+// como rede de segurança caso o volume passe do combinado.
+const EVOLUTION_CHECKPOINTS: { at: number; minMs: number; maxMs: number; repeatEvery?: number }[] = [
   { at: 20, minMs: 2 * 60_000, maxMs: 4 * 60_000 },
   { at: 50, minMs: 8 * 60_000, maxMs: 12 * 60_000 },
   { at: 100, minMs: 20 * 60_000, maxMs: 30 * 60_000 },
+  { at: 300, minMs: 45 * 60_000, maxMs: 75 * 60_000 },
+  { at: 600, minMs: 75 * 60_000, maxMs: 120 * 60_000 },
+  { at: 1000, minMs: 150 * 60_000, maxMs: 240 * 60_000, repeatEvery: 500 },
 ];
 
 type CampaignWithRelations = {
@@ -161,7 +168,10 @@ export class DispatchQueueService {
 
     for (const checkpoint of EVOLUTION_CHECKPOINTS) {
       const crossed =
-        sentToday === checkpoint.at || (checkpoint.at === 100 && sentToday > 100 && sentToday % 100 === 0);
+        sentToday === checkpoint.at ||
+        (checkpoint.repeatEvery !== undefined &&
+          sentToday > checkpoint.at &&
+          (sentToday - checkpoint.at) % checkpoint.repeatEvery === 0);
       if (crossed) {
         delay += this.randomBetween(checkpoint.minMs, checkpoint.maxMs);
       }
