@@ -55,11 +55,14 @@ const SENDING_WINDOW_START_HOUR = 8;
 const SENDING_WINDOW_END_HOUR = 21;
 const SENDING_WINDOW_TIMEZONE = 'America/Sao_Paulo';
 
-// 5) Circuit breaker: se a taxa de falha recente for alta, pausa sozinho —
-// pode ser sinal de que o número já está sendo throttled/bloqueado.
+// 5) Circuit breaker: se a taxa de falha recente for alta, NÃO pausa a campanha
+// (exigiria retomada manual) — em vez disso aplica um resfriamento extra no
+// próximo envio, desacelerando bastante sem nunca parar de enviar.
 const CIRCUIT_BREAKER_SAMPLE_SIZE = 20;
 const CIRCUIT_BREAKER_MIN_SAMPLE = 10;
 const CIRCUIT_BREAKER_FAILURE_RATE = 0.3;
+const CIRCUIT_BREAKER_COOLDOWN_MIN_MS = 15 * 60_000; // 15min
+const CIRCUIT_BREAKER_COOLDOWN_MAX_MS = 30 * 60_000; // 30min
 
 // 6) "Digitando..." antes de cada envio — a Evolution API simula presença de
 // composing pelo tempo informado em vez de a mensagem aparecer instantânea.
@@ -180,10 +183,13 @@ export class DispatchQueueService {
     }
 
     await this.sendOne(campaign, message);
-    await this.checkCircuitBreaker(numberId);
+    const circuitBreakerTriggered = await this.checkCircuitBreaker(numberId);
 
     const sentTodayAfter = sentToday + 1;
-    const delay = this.delayForEvolutionCount(sentTodayAfter);
+    let delay = this.delayForEvolutionCount(sentTodayAfter);
+    if (circuitBreakerTriggered) {
+      delay += this.randomBetween(CIRCUIT_BREAKER_COOLDOWN_MIN_MS, CIRCUIT_BREAKER_COOLDOWN_MAX_MS);
+    }
     this.nextAllowedSendAt.set(numberId, Date.now() + delay);
   }
 
@@ -213,7 +219,9 @@ export class DispatchQueueService {
     return tier.dailyCap;
   }
 
-  private async checkCircuitBreaker(whatsAppNumberId: string) {
+  // Retorna true se a taxa de falha recente estiver alta — quem chama aplica um
+  // resfriamento extra no delay, mas a campanha continua em SENDING.
+  private async checkCircuitBreaker(whatsAppNumberId: string): Promise<boolean> {
     const recent = await this.prisma.campaignMessage.findMany({
       where: {
         campaign: { whatsAppNumberId },
@@ -222,18 +230,16 @@ export class DispatchQueueService {
       orderBy: { updatedAt: 'desc' },
       take: CIRCUIT_BREAKER_SAMPLE_SIZE,
     });
-    if (recent.length < CIRCUIT_BREAKER_MIN_SAMPLE) return;
+    if (recent.length < CIRCUIT_BREAKER_MIN_SAMPLE) return false;
 
     const failures = recent.filter((m) => m.status === MessageStatus.FAILED).length;
     if (failures / recent.length >= CIRCUIT_BREAKER_FAILURE_RATE) {
       this.logger.warn(
-        `Taxa de erro alta (${failures}/${recent.length}) no número ${whatsAppNumberId} — pausando campanhas automaticamente (possível sinal de bloqueio/throttling pelo WhatsApp)`,
+        `Taxa de erro alta (${failures}/${recent.length}) no número ${whatsAppNumberId} — desacelerando envio (possível sinal de bloqueio/throttling pelo WhatsApp), sem pausar a campanha`,
       );
-      await this.prisma.campaign.updateMany({
-        where: { whatsAppNumberId, status: CampaignStatus.SENDING },
-        data: { status: CampaignStatus.PAUSED },
-      });
+      return true;
     }
+    return false;
   }
 
   private async completeCampaignIfDone(campaignId: string) {
