@@ -298,7 +298,7 @@ export class DispatchQueueService {
         }),
       ]);
     } catch (err: any) {
-      const errorMessage = err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || 'Falha desconhecida';
+      const errorMessage = this.extractErrorMessage(err);
       this.logger.error(`Falha ao enviar mensagem ${message.id}: ${errorMessage}`);
       await this.prisma.$transaction([
         this.prisma.campaignMessage.update({
@@ -311,6 +311,25 @@ export class DispatchQueueService {
         }),
       ]);
     }
+  }
+
+  // Evolution API e Meta Cloud API têm formatos de erro diferentes; aqui tentamos
+  // extrair algo legível para o usuário em vez do genérico "Request failed...".
+  private extractErrorMessage(err: any): string {
+    const responseMessage = err?.response?.data?.response?.message;
+    if (Array.isArray(responseMessage) && responseMessage.length > 0) {
+      const first = responseMessage[0];
+      if (typeof first === 'object' && first?.exists === false) {
+        return `Número não tem WhatsApp (${first.number ?? '?'})`;
+      }
+      if (typeof first === 'string') return responseMessage.join('; ');
+    }
+    return (
+      err?.response?.data?.error?.message ||
+      err?.response?.data?.message ||
+      err?.message ||
+      'Falha desconhecida'
+    );
   }
 
   private async sendViaMeta(
