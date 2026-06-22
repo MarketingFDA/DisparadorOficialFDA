@@ -22,6 +22,7 @@
   <nav class="tabs">
     <a class="tab" href="index.html">Campanhas</a>
     <a class="tab active" href="campanha.html">Nova campanha</a>
+    <a class="tab" href="numeros.html">Números</a>
   </nav>
 </header>
 
@@ -33,24 +34,53 @@
 
     <form id="campaign-form" class="form-grid">
       <label class="field">
-        <span>Nome do template</span>
+        <span>Canal de envio</span>
+        <div class="channel-switch">
+          <label class="channel-option">
+            <input type="radio" name="channel" value="META_CLOUD_API" checked />
+            <div class="channel-title">Meta Oficial</div>
+            <div class="channel-desc">Template aprovado, número verificado.</div>
+          </label>
+          <label class="channel-option">
+            <input type="radio" name="channel" value="EVOLUTION_API" />
+            <div class="channel-title">WhatsApp Normal</div>
+            <div class="channel-desc">Número comum, via Evolution API.</div>
+          </label>
+        </div>
+      </label>
+
+      <label class="field">
+        <span>Nome da campanha</span>
         <input type="text" id="campaign-name" placeholder="Ex: Saia da mira da RFB RJ" required />
       </label>
 
       <label class="field">
-        <span>Número (WhatsApp Business)</span>
+        <span>Número de envio</span>
         <select id="campaign-number" required></select>
       </label>
 
-      <label class="field">
-        <span>Idioma</span>
-        <div class="static-pill">🇧🇷 Português (Brasil)</div>
-      </label>
+      <div id="meta-campaign-fields">
+        <label class="field">
+          <span>Idioma</span>
+          <div class="static-pill">🇧🇷 Português (Brasil)</div>
+        </label>
 
-      <label class="field">
-        <span>Template aprovado</span>
-        <select id="campaign-template" required></select>
-      </label>
+        <label class="field">
+          <span>Template aprovado</span>
+          <select id="campaign-template"></select>
+        </label>
+      </div>
+
+      <div id="evolution-campaign-fields" style="display:none;">
+        <label class="field">
+          <span>Mensagem</span>
+          <textarea id="campaign-message" placeholder="Ex: Olá {{nome}}, tudo bem? Aqui é da Fradema..."></textarea>
+          <span class="field-hint">Use <code>{{nome}}</code> para inserir o nome do contato automaticamente.</span>
+        </label>
+        <div class="warning-box">
+          ⚠️ Canal não-oficial. Envios são espaçados em 10s entre cada mensagem para reduzir o risco de bloqueio, mas o WhatsApp pode banir o número a qualquer momento — não há garantia de que isso seja 100% seguro. Use só com contatos que já têm relacionamento com a Fradema.
+        </div>
+      </div>
 
       <label class="field">
         <span>Grupo de destinatários</span>

@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DispatchQueueService } from '../whatsapp/dispatch-queue.service';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
-import { CampaignStatus, MessageStatus } from '@prisma/client';
+import { CampaignStatus, Channel, MessageStatus } from '@prisma/client';
 
 @Injectable()
 export class CampaignsService {
@@ -31,12 +31,23 @@ export class CampaignsService {
     return campaign;
   }
 
-  create(dto: CreateCampaignDto) {
+  async create(dto: CreateCampaignDto) {
+    const number = await this.prisma.whatsAppNumber.findUnique({ where: { id: dto.whatsAppNumberId } });
+    if (!number) throw new NotFoundException('Número de WhatsApp não encontrado');
+
+    if (number.channel === Channel.META_CLOUD_API && !dto.templateId) {
+      throw new BadRequestException('templateId é obrigatório para campanhas no canal Meta Cloud API');
+    }
+    if (number.channel === Channel.EVOLUTION_API && !dto.messageText?.trim()) {
+      throw new BadRequestException('messageText é obrigatório para campanhas no canal Evolution API');
+    }
+
     return this.prisma.campaign.create({
       data: {
         name: dto.name,
         whatsAppNumberId: dto.whatsAppNumberId,
-        templateId: dto.templateId,
+        templateId: number.channel === Channel.META_CLOUD_API ? dto.templateId : undefined,
+        messageText: number.channel === Channel.EVOLUTION_API ? dto.messageText : undefined,
         groupId: dto.groupId,
       },
     });

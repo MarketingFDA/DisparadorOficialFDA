@@ -44,8 +44,8 @@ function renderCampaigns(campaigns) {
     .map((c) => {
       const statusLabel = STATUS_LABEL[c.status] || c.status;
       const statusClass = STATUS_CLASS[c.status] || 'badge-draft';
-      const numero = c.whatsAppNumber?.displayNumber || c.whatsAppNumber?.phoneNumberId || '—';
-      const template = c.template?.name || '—';
+      const numero = c.whatsAppNumber?.displayNumber || c.whatsAppNumber?.phoneNumberId || c.whatsAppNumber?.evolutionInstanceName || '—';
+      const template = c.template?.name || (c.messageText ? `${c.messageText.slice(0, 40)}${c.messageText.length > 40 ? '…' : ''}` : '—');
       return `
         <tr data-id="${c.id}">
           <td><input type="checkbox" class="row-check" data-id="${c.id}" ${selectedIds.has(c.id) ? 'checked' : ''} /></td>

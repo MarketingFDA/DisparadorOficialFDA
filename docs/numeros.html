@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Números — Disparador Fradema</title>
+<link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body>
+<div class="bg-blobs" aria-hidden="true">
+  <span class="blob blob-1"></span>
+  <span class="blob blob-2"></span>
+  <span class="blob blob-3"></span>
+</div>
+
+<header class="topbar glass">
+  <div class="brand">
+    <span class="brand-dot"></span>
+    <span>Disparador Fradema</span>
+  </div>
+  <nav class="tabs">
+    <a class="tab" href="index.html">Campanhas</a>
+    <a class="tab" href="campanha.html">Nova campanha</a>
+    <a class="tab active" href="numeros.html">Números</a>
+  </nav>
+</header>
+
+<main class="page">
+  <section class="panel glass">
+    <div class="panel-header">
+      <h1>Números de envio</h1>
+      <div class="panel-actions">
+        <button class="btn btn-primary" id="novo-numero-btn">＋ Novo número</button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Canal</th>
+            <th>Label</th>
+            <th>Número</th>
+            <th>Identificador</th>
+            <th>Tipo</th>
+          </tr>
+        </thead>
+        <tbody id="numbers-tbody">
+          <tr><td colspan="5" class="empty-state">Carregando números…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel glass form-panel" id="numero-form-panel" style="display:none;">
+    <div class="panel-header">
+      <h2>Cadastrar número</h2>
+    </div>
+
+    <form id="numero-form" class="form-grid">
+      <label class="field">
+        <span>Canal</span>
+        <div class="channel-switch">
+          <label class="channel-option">
+            <input type="radio" name="channel" value="META_CLOUD_API" checked />
+            <div class="channel-title">Meta Oficial</div>
+            <div class="channel-desc">WhatsApp Business API — exige template aprovado e número verificado.</div>
+          </label>
+          <label class="channel-option">
+            <input type="radio" name="channel" value="EVOLUTION_API" />
+            <div class="channel-title">WhatsApp Normal</div>
+            <div class="channel-desc">Via Evolution API (não-oficial) — número pessoal/comercial comum.</div>
+          </label>
+        </div>
+      </label>
+
+      <label class="field">
+        <span>Label (nome interno)</span>
+        <input type="text" id="numero-label" placeholder="Ex: Fradema RJ - Comercial" required />
+      </label>
+
+      <label class="field">
+        <span>Número exibido (opcional)</span>
+        <input type="text" id="numero-display" placeholder="Ex: +55 21 99421-4510" />
+      </label>
+
+      <div id="meta-fields">
+        <label class="field">
+          <span>Phone Number ID (Meta)</span>
+          <input type="text" id="numero-phone-id" placeholder="ID do número na Meta" />
+        </label>
+        <label class="field">
+          <span>WABA ID (Meta)</span>
+          <input type="text" id="numero-waba-id" placeholder="ID da WhatsApp Business Account" />
+        </label>
+      </div>
+
+      <div id="evolution-fields" style="display:none;">
+        <label class="field">
+          <span>Nome da instância (Evolution API)</span>
+          <input type="text" id="numero-instance" placeholder="Ex: fradema-comercial" />
+          <span class="field-hint">Precisa já existir e estar conectada (QR Code escaneado) na sua Evolution API.</span>
+        </label>
+        <div class="warning-box">
+          ⚠️ Canal não-oficial. Os disparos são espaçados em 10s entre cada mensagem para reduzir o risco de bloqueio, mas o WhatsApp pode banir o número a qualquer momento — não há garantia. Use só com contatos que já têm relacionamento com a Fradema. Veja <code>EVOLUTION_SETUP.md</code> no repositório para configurar a URL pública da sua instância.
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="button" class="btn btn-ghost" id="cancelar-numero-btn">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Salvar número</button>
+      </div>
+    </form>
+  </section>
+</main>
+
+<div class="toast-stack" id="toast-stack"></div>
+
+<script src="assets/js/api.js"></script>
+<script src="assets/js/numeros.js"></script>
+</body>
+</html>

@@ -1,7 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappApiService } from '../whatsapp/whatsapp-api.service';
-import { TemplateStatus } from '@prisma/client';
+import { Channel, TemplateStatus } from '@prisma/client';
 
 const META_STATUS_MAP: Record<string, TemplateStatus> = {
   APPROVED: TemplateStatus.APPROVED,
@@ -29,6 +29,9 @@ export class TemplatesService {
   async sync(whatsAppNumberId: string) {
     const number = await this.prisma.whatsAppNumber.findUnique({ where: { id: whatsAppNumberId } });
     if (!number) throw new NotFoundException('Número de WhatsApp não encontrado');
+    if (number.channel !== Channel.META_CLOUD_API || !number.wabaId) {
+      throw new BadRequestException('Sincronização de templates só está disponível para números do canal Meta Cloud API');
+    }
 
     const metaTemplates = await this.whatsapp.fetchMessageTemplates(number.wabaId);
 

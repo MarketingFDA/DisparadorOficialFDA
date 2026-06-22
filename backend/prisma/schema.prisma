@@ -14,6 +14,11 @@ enum TemplateStatus {
   PAUSED
 }
 
+enum Channel {
+  META_CLOUD_API
+  EVOLUTION_API
+}
+
 enum CampaignStatus {
   DRAFT
   QUEUED
@@ -33,10 +38,17 @@ enum MessageStatus {
 }
 
 model WhatsAppNumber {
-  id            String     @id @default(cuid())
-  label         String
-  phoneNumberId String     @unique
-  wabaId        String
+  id        String  @id @default(cuid())
+  label     String
+  channel   Channel @default(META_CLOUD_API)
+
+  // Meta Cloud API (canal oficial)
+  phoneNumberId String? @unique
+  wabaId        String?
+
+  // Evolution API (canal não-oficial, número normal)
+  evolutionInstanceName String?
+
   displayNumber String?
   isTestNumber  Boolean    @default(true)
   isActive      Boolean    @default(true)
@@ -98,8 +110,10 @@ model Campaign {
   status           CampaignStatus    @default(DRAFT)
   whatsAppNumberId String
   whatsAppNumber   WhatsAppNumber    @relation(fields: [whatsAppNumberId], references: [id])
-  templateId       String
-  template         Template          @relation(fields: [templateId], references: [id])
+  templateId       String?
+  template         Template?         @relation(fields: [templateId], references: [id])
+  // Texto livre usado no canal Evolution API (não-oficial). Aceita {{nome}} como placeholder.
+  messageText      String?
   groupId          String
   group            ContactGroup      @relation(fields: [groupId], references: [id])
   scheduledAt      DateTime?
@@ -125,6 +139,7 @@ model CampaignMessage {
   contactId     String
   contact       Contact       @relation(fields: [contactId], references: [id])
   status        MessageStatus @default(PENDING)
+  // id retornado pelo provedor no envio: wamid da Meta ou key.id da Evolution API
   metaMessageId String?       @unique
   errorCode     String?
   errorMessage  String?

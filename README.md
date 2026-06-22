@@ -1,6 +1,9 @@
 # Disparador Fradema
 
-MVP do módulo "Campanhas por WhatsApp": disparo de campanhas em massa via Meta Cloud API (WhatsApp oficial), com acompanhamento de estatísticas de entrega/leitura em tempo quase real.
+MVP do módulo "Campanhas por WhatsApp": disparo de campanhas em massa, com acompanhamento de estatísticas de entrega/leitura em tempo quase real. Suporta dois canais:
+
+- **Meta Oficial** — WhatsApp Business Platform (Graph API), com template aprovado e número verificado.
+- **WhatsApp Normal** — número comum via Evolution API (não-oficial), sem exigir template, com delay de 10s entre envios. Ver [`EVOLUTION_SETUP.md`](./EVOLUTION_SETUP.md) para configurar e entender os riscos (sem garantia contra banimento).
 
 Frontend estático publicado em [marketingfda.github.io/DisparadorOficialFDA](https://marketingfda.github.io/DisparadorOficialFDA), consumindo uma API backend hospedada na nuvem (Render).
 
@@ -38,6 +41,8 @@ API sobe em `http://localhost:3001`.
 | `META_APP_SECRET` | App Secret do Meta Developer App, usado para validar assinatura do webhook |
 | `META_WEBHOOK_VERIFY_TOKEN` | String própria, configurada também no painel da Meta |
 | `META_API_VERSION` | Versão da Graph API (ex: `v20.0`) |
+| `EVOLUTION_API_URL` | URL pública da Evolution API (canal WhatsApp Normal) — ver `EVOLUTION_SETUP.md` |
+| `EVOLUTION_API_KEY` | API key da Evolution API |
 | `CORS_ORIGIN` | Origem permitida no CORS (ex: `https://marketingfda.github.io`) |
 | `PORT` | Porta do servidor (default `3001`) |
 
@@ -48,6 +53,10 @@ API sobe em `http://localhost:3001`.
 ## Configuração da Meta (WhatsApp Cloud API)
 
 Ver checklist completo em [`META_SETUP.md`](./META_SETUP.md).
+
+## Configuração do canal WhatsApp Normal (Evolution API)
+
+Ver checklist completo em [`EVOLUTION_SETUP.md`](./EVOLUTION_SETUP.md).
 
 ## Escopo do MVP
 

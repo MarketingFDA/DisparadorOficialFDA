@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { NumbersService } from './numbers.service';
+import type { CreateNumberInput } from './numbers.service';
 
 @Controller('numbers')
 export class NumbersController {
@@ -11,10 +12,7 @@ export class NumbersController {
   }
 
   @Post()
-  create(
-    @Body()
-    body: { label: string; phoneNumberId: string; wabaId: string; displayNumber?: string; isTestNumber?: boolean },
-  ) {
+  create(@Body() body: CreateNumberInput) {
     return this.numbersService.create(body);
   }
 }
