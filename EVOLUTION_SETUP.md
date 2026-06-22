@@ -8,34 +8,43 @@ Esse canal usa a **Evolution API** (automação não-oficial sobre o WhatsApp We
 - Use só com contatos que já têm relacionamento com a Fradema (clientes, leads que pediram contato). Não é recomendado para listas frias.
 - Se o número cadastrado for usado por alguém no dia a dia (WhatsApp Web aberto, app no celular), evite rodar disparos simultâneos — pode gerar conflito de sessão.
 
+## Status atual (22/06/2026): infraestrutura de túnel já configurada
+
+O túnel público e as variáveis no Render **já foram configurados** nesta máquina. Não é preciso repetir os passos 2 e 3 abaixo a menos que algo pare de funcionar.
+
+- Ferramenta usada: **ngrok** (não Cloudflare Tunnel — testamos e a rede aqui bloqueia a porta 7844 que o Cloudflare Tunnel exige; ngrok usa TLS real na porta 443 e passa).
+- URL pública estável: `https://legwarmer-ascend-sprinkler.ngrok-free.dev` (conta free do ngrok, domínio ficou fixo entre reinícios — não é aleatório a cada restart).
+- Processo rodando em background nesta máquina (`ngrok http 8080`) + LaunchAgent registrada em `~/Library/LaunchAgents/com.fradema.evolution-tunnel.plist` (label `com.fradema.evolution-tunnel`) para tentar subir sozinho em reinícios/login do Mac. **Não testamos um reboot real** — se o canal parar de responder depois de reiniciar o Mac, rode manualmente: `ngrok http 8080 --log=stdout` (log fica em `~/Library/Logs/ngrok.log`).
+- `EVOLUTION_API_URL` e `EVOLUTION_API_KEY` já estão setados no serviço `disparador-fradema-backend` no Render (configurado via API, não pelo painel) e o backend já foi redeployado com eles.
+- Validado ponta a ponta: requisição HTTPS através do túnel chega na Evolution API local e retorna resposta da aplicação (não erro de rede).
+
+**Risco conhecido:** conta free do ngrok permite só 1 sessão de túnel simultânea. Se alguém rodar `ngrok` de novo nessa mesma conta em outra máquina/processo, o túnel atual cai.
+
 ## 1. Ter uma instância da Evolution API rodando e conectada
 
-Se você já tem a Evolution API rodando local (Docker, `~/evolution-api`, painel em `http://localhost:8080/manager`):
+Isso ainda **não foi feito** — é a única coisa que falta para o canal funcionar de verdade, e só dá pra fazer com o celular físico do número que vai disparar:
 
-1. Acesse o manager e crie uma instância (`POST /instance/create` ou pela UI).
+1. Acesse o manager em `http://localhost:8080/manager` (ou `POST /instance/create` direto na API) e crie uma instância.
 2. Escaneie o QR Code com o número de WhatsApp normal que vai disparar as mensagens.
 3. Anote o **nome da instância** — é o que você vai cadastrar na tela "Números" do Disparador.
+4. Cadastre o número na tela **Números** do Disparador (canal "WhatsApp Normal" + nome da instância) — ver passo abaixo.
 
-## 2. Expor a instância publicamente
+## 2. Expor a instância publicamente (referência — já feito, ver "Status atual")
 
-O backend do Disparador roda na nuvem (Render), não na sua máquina — ele **não enxerga** `http://localhost:8080`. Para o canal funcionar em produção, a Evolution API precisa estar acessível por uma URL pública HTTPS. Opções, da mais simples à mais robusta:
+Opções caso o túnel atual precise ser refeito do zero, da mais simples à mais robusta:
 
-- **Cloudflare Tunnel** (grátis, sem alterar o docker-compose): `cloudflared tunnel --url http://localhost:8080` gera uma URL pública temporária. Para algo permanente, crie um Named Tunnel vinculado a um domínio.
-- **Deploy da própria Evolution API na nuvem** (Render, Railway, VPS) ao invés de local — mais estável, mas exige manter outro serviço no ar.
-- Qualquer outro proxy reverso com HTTPS (Nginx + domínio próprio, ngrok pago para URL fixa, etc).
+- **ngrok** (o que está em uso): `ngrok http 8080` — grátis, sem cartão, mas exige conta (authtoken em dashboard.ngrok.com) e tem limite de 1 sessão simultânea no free tier.
+- **Cloudflare Tunnel**: `cloudflared tunnel --url http://localhost:8080` — grátis e sem limite de sessão, mas exige porta 7844 (TCP+UDP) liberada de saída; **não funcionou na rede em que isso foi configurado** por bloqueio de firewall.
+- **Deploy da própria Evolution API na nuvem** (Render, Railway, VPS) ao invés de local — elimina a necessidade de túnel, mas exige manter outro serviço no ar e reconectar a instância (novo QR Code).
 
-Sem isso, campanhas no canal "WhatsApp Normal" vão falhar com erro de conexão ao tentar disparar a partir do backend hospedado.
-
-## 3. Configurar variáveis de ambiente no backend
-
-No Render, vá em **Environment** do serviço `disparador-fradema-backend` e preencha:
+## 3. Variáveis de ambiente no backend (referência — já feito, ver "Status atual")
 
 | Variável | Descrição |
 |---|---|
-| `EVOLUTION_API_URL` | URL pública da sua Evolution API (ex: `https://seu-tunnel.trycloudflare.com`) |
+| `EVOLUTION_API_URL` | URL pública da Evolution API |
 | `EVOLUTION_API_KEY` | Valor de `AUTHENTICATION_API_KEY` do `.env` da Evolution API |
 
-Rodando local, coloque as mesmas variáveis no `backend/.env`.
+Configurado no Render em **Environment** do serviço `disparador-fradema-backend`. Rodando local, coloque as mesmas variáveis no `backend/.env`.
 
 ## 4. Cadastrar o número no Disparador
 
