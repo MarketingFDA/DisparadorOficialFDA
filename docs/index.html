@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Disparador Fradema — Campanhas WhatsApp</title>
 <link rel="stylesheet" href="assets/css/styles.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
 </head>
 <body>
 <div class="bg-blobs" aria-hidden="true">
@@ -71,16 +72,27 @@
             <th>Nome</th>
             <th>Número</th>
             <th>Template</th>
+            <th>Progresso</th>
             <th>Ações</th>
           </tr>
         </thead>
         <tbody id="campaigns-tbody">
-          <tr><td colspan="6" class="empty-state">Carregando campanhas…</td></tr>
+          <tr><td colspan="7" class="empty-state">Carregando campanhas…</td></tr>
         </tbody>
       </table>
     </div>
     <div class="table-footer">
       <span id="campaigns-count">Mostrando 0 registros</span>
+      <span id="live-indicator" style="display:none;"><span class="live-dot"></span>Atualizando ao vivo</span>
+    </div>
+  </section>
+
+  <section class="panel glass">
+    <div class="panel-header">
+      <h2>Visão geral</h2>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="overview-chart" height="90"></canvas>
     </div>
   </section>
 

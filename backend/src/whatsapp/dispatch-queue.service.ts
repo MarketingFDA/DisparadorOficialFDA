@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappApiService } from './whatsapp-api.service';
@@ -112,6 +112,41 @@ export class DispatchQueueService {
     } finally {
       this.processing = false;
     }
+  }
+
+  // Campanhas criadas com scheduledAt ficam QUEUED até esse horário chegar.
+  @Cron(CronExpression.EVERY_30_SECONDS)
+  async promoteScheduledCampaigns() {
+    const due = await this.prisma.campaign.findMany({
+      where: { status: CampaignStatus.QUEUED, scheduledAt: { lte: new Date() } },
+    });
+    for (const campaign of due) {
+      try {
+        await this.dispatchNow(campaign.id, campaign.groupId);
+      } catch (err) {
+        this.logger.error(`Falha ao iniciar campanha agendada ${campaign.id}: ${(err as Error).message}`);
+        await this.prisma.campaign
+          .update({ where: { id: campaign.id }, data: { status: CampaignStatus.FAILED } })
+          .catch(() => {});
+      }
+    }
+  }
+
+  // Cria as CampaignMessage (uma por contato do grupo, se ainda não existirem) e inicia o envio.
+  // Usado tanto pelo disparo manual (POST /campaigns/:id/dispatch) quanto pela promoção de agendadas.
+  async dispatchNow(campaignId: string, groupId: string) {
+    const existingCount = await this.prisma.campaignMessage.count({ where: { campaignId } });
+    if (existingCount === 0) {
+      const contacts = await this.prisma.contact.findMany({ where: { groupId } });
+      if (contacts.length === 0) {
+        throw new BadRequestException('O grupo de destinatários selecionado não tem contatos');
+      }
+      await this.prisma.campaignMessage.createMany({
+        data: contacts.map((c) => ({ campaignId, contactId: c.id, status: MessageStatus.PENDING })),
+      });
+      await this.prisma.campaign.update({ where: { id: campaignId }, data: { totalCount: contacts.length } });
+    }
+    await this.startCampaign(campaignId);
   }
 
   private async processBatch() {

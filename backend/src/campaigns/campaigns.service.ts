@@ -42,6 +42,14 @@ export class CampaignsService {
       throw new BadRequestException('messageText é obrigatório para campanhas no canal Evolution API');
     }
 
+    let scheduledAt: Date | undefined;
+    if (dto.scheduledAt) {
+      scheduledAt = new Date(dto.scheduledAt);
+      if (Number.isNaN(scheduledAt.getTime())) {
+        throw new BadRequestException('Data de agendamento inválida');
+      }
+    }
+
     return this.prisma.campaign.create({
       data: {
         name: dto.name,
@@ -49,6 +57,8 @@ export class CampaignsService {
         templateId: number.channel === Channel.META_CLOUD_API ? dto.templateId : undefined,
         messageText: number.channel === Channel.EVOLUTION_API ? dto.messageText : undefined,
         groupId: dto.groupId,
+        scheduledAt,
+        status: scheduledAt ? CampaignStatus.QUEUED : undefined,
       },
     });
   }
@@ -113,25 +123,29 @@ export class CampaignsService {
     if (campaign.status === CampaignStatus.SENDING) {
       throw new BadRequestException('Campanha já está em envio');
     }
-
-    const existingCount = await this.prisma.campaignMessage.count({ where: { campaignId: id } });
-    if (existingCount === 0) {
-      const contacts = await this.prisma.contact.findMany({ where: { groupId: campaign.groupId } });
-      if (contacts.length === 0) {
-        throw new BadRequestException('O grupo de destinatários selecionado não tem contatos');
-      }
-      await this.prisma.campaignMessage.createMany({
-        data: contacts.map((c) => ({ campaignId: id, contactId: c.id, status: MessageStatus.PENDING })),
-      });
-      await this.prisma.campaign.update({ where: { id }, data: { totalCount: contacts.length } });
-    }
-
-    await this.dispatchQueue.startCampaign(id);
+    await this.dispatchQueue.dispatchNow(id, campaign.groupId);
     return this.findOne(id);
   }
 
   async pause(id: string) {
     await this.dispatchQueue.pauseCampaign(id);
     return this.findOne(id);
+  }
+
+  // Relatório detalhado por contato (telemetria por mensagem, não só os agregados de Campaign).
+  async messages(id: string, status?: MessageStatus, page = 1, pageSize = 50) {
+    await this.findOne(id); // 404 se a campanha não existir
+    const where = { campaignId: id, ...(status ? { status } : {}) };
+    const [total, rows] = await Promise.all([
+      this.prisma.campaignMessage.count({ where }),
+      this.prisma.campaignMessage.findMany({
+        where,
+        include: { contact: true },
+        orderBy: { updatedAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+    return { total, page, pageSize, rows };
   }
 }

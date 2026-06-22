@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { MessageStatus } from '@prisma/client';
 import { CampaignsService } from './campaigns.service';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
@@ -15,6 +16,16 @@ export class CampaignsController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.campaignsService.findOne(id);
+  }
+
+  @Get(':id/messages')
+  messages(
+    @Param('id') id: string,
+    @Query('status') status?: MessageStatus,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.campaignsService.messages(id, status, page ? Number(page) : undefined, pageSize ? Number(pageSize) : undefined);
   }
 
   @Post()

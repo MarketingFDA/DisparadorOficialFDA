@@ -36,6 +36,14 @@ const api = {
     sync: (id) => apiRequest(`/campaigns/${id}/sync`, { method: 'POST' }),
     dispatch: (id) => apiRequest(`/campaigns/${id}/dispatch`, { method: 'POST' }),
     pause: (id) => apiRequest(`/campaigns/${id}/pause`, { method: 'POST' }),
+    messages: (id, { status, page, pageSize } = {}) => {
+      const params = new URLSearchParams();
+      if (status) params.set('status', status);
+      if (page) params.set('page', page);
+      if (pageSize) params.set('pageSize', pageSize);
+      const qs = params.toString();
+      return apiRequest(`/campaigns/${id}/messages${qs ? `?${qs}` : ''}`);
+    },
   },
   templates: {
     list: (whatsAppNumberId) =>

@@ -78,7 +78,7 @@
           <span class="field-hint">Use <code>{{nome}}</code> para inserir o nome do contato automaticamente.</span>
         </label>
         <div class="warning-box">
-          ⚠️ Canal não-oficial. Proteções automáticas: pausa entre envios crescente por volume (10-18s até 4-6min), "digitando..." antes de cada mensagem, janela de horário (8h-21h), aquecimento progressivo (número novo manda no máximo 40/dia, crescendo com os dias) e pausa automática se a taxa de erro disparar. Mesmo assim, em volumes de centenas por dia o risco de bloqueio é real — para volume alto e previsível, prefira o canal Meta Oficial. Use só com contatos que já têm relacionamento com a Fradema.
+          ⚠️ Canal não-oficial. Proteções automáticas: pausa entre envios crescente por volume (10-18s até 4-6min), "digitando..." antes de cada mensagem, janela de horário (8h-21h), aquecimento progressivo (número novo manda no máximo 40/dia, crescendo com os dias) e desaceleração automática (sem nunca parar) se a taxa de erro disparar. Mesmo assim, em volumes de centenas por dia o risco de bloqueio é real — para volume alto e previsível, prefira o canal Meta Oficial. Use só com contatos que já têm relacionamento com a Fradema.
         </div>
       </div>
 
@@ -103,6 +103,12 @@
           <p class="import-result" id="import-result"></p>
         </div>
       </div>
+
+      <label class="field">
+        <span>Agendar envio (opcional)</span>
+        <input type="datetime-local" id="campaign-schedule" />
+        <span class="field-hint">Deixe em branco para criar como rascunho e disparar manualmente depois. Se preencher, a campanha entra "Na fila" e começa sozinha no horário escolhido.</span>
+      </label>
 
       <div class="form-actions">
         <a href="index.html" class="btn btn-ghost">Cancelar</a>

@@ -263,7 +263,16 @@ html, body {
   font-size: 13px;
 }
 
-.table-footer { margin-top: 12px; color: var(--text-3); font-size: 13px; }
+.table-footer {
+  margin-top: 12px;
+  color: var(--text-3);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.table-footer #live-indicator { color: var(--accent); font-weight: 600; display: inline-flex; align-items: center; }
 
 .modal-backdrop, .modal {
   display: none;
@@ -418,8 +427,90 @@ html, body {
 .qrcode-box img { width: 100%; height: auto; display: block; }
 .qrcode-box .empty-state { color: var(--text-3); }
 
+.status-sub { font-size: 11px; color: var(--text-3); margin-top: 4px; white-space: nowrap; }
+
+.progress-cell { min-width: 140px; }
+.progress-bar {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.progress-bar-fill {
+  position: absolute;
+  inset: 0;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.4s ease;
+}
+.progress-bar-fill.has-errors { background: linear-gradient(90deg, var(--accent-2), var(--danger)); }
+.progress-label { font-size: 11.5px; color: var(--text-3); margin-top: 5px; }
+
+.live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  margin-right: 6px;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.chart-wrap { padding: 8px 4px 4px; }
+.chart-wrap canvas { max-height: 260px; }
+
+.link-btn {
+  background: transparent;
+  border: none;
+  color: var(--accent-2);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0;
+  text-decoration: underline;
+}
+.link-btn:hover { color: var(--accent); }
+
+.filter-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.filter-pill {
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.filter-pill.active {
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  border-color: transparent;
+}
+
+.pagination { display: flex; align-items: center; gap: 10px; margin-top: 12px; justify-content: flex-end; }
+.pagination button {
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
+  color: var(--text-1);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+.pagination span { font-size: 12.5px; color: var(--text-3); }
+
 @media (max-width: 720px) {
   .topbar { flex-direction: column; gap: 12px; align-items: stretch; }
   .panel-actions { width: 100%; }
   .search-box input { width: 100%; }
+  .data-table { font-size: 12.5px; }
+  .data-table thead th, .data-table tbody td { padding: 9px 8px; }
+  .progress-cell { min-width: 100px; }
 }

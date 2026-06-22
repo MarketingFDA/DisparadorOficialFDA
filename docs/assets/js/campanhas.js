@@ -1,5 +1,8 @@
 let campaignsCache = [];
 let selectedIds = new Set();
+let overviewChart = null;
+let refreshTimer = null;
+const REFRESH_INTERVAL_MS = 8000;
 
 const STATUS_LABEL = {
   DRAFT: 'Rascunho',
@@ -24,11 +27,81 @@ async function loadCampaigns(search) {
     campaignsCache = await api.campaigns.list(search);
     renderCampaigns(campaignsCache);
     renderStats(campaignsCache);
+    renderOverviewChart(campaignsCache);
+    updateLiveIndicator(campaignsCache);
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Não foi possível carregar campanhas (${escapeHtml(err.message)}). Verifique se o backend está rodando.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Não foi possível carregar campanhas (${escapeHtml(err.message)}). Verifique se o backend está rodando.</td></tr>`;
     document.getElementById('stats-tbody').innerHTML =
       '<tr><td colspan="7" class="empty-state">—</td></tr>';
   }
+}
+
+// Liga/desliga o polling automático: só fica ativo enquanto houver campanha em
+// envio (SENDING) ou agendada (QUEUED) — evita gastar chamadas à toa parado em Rascunho/Finalizado.
+function updateLiveIndicator(campaigns) {
+  const indicator = document.getElementById('live-indicator');
+  const hasLive = campaigns.some((c) => c.status === 'SENDING' || c.status === 'QUEUED');
+  indicator.style.display = hasLive ? '' : 'none';
+
+  clearTimeout(refreshTimer);
+  if (hasLive && document.visibilityState === 'visible') {
+    refreshTimer = setTimeout(() => loadCampaigns(currentSearch()), REFRESH_INTERVAL_MS);
+  } else if (hasLive) {
+    // aba em segundo plano: tenta de novo em 30s só pra não perder o estado, sem martelar a API
+    refreshTimer = setTimeout(() => loadCampaigns(currentSearch()), 30000);
+  }
+}
+
+function renderOverviewChart(campaigns) {
+  const canvas = document.getElementById('overview-chart');
+  if (!canvas || typeof Chart === 'undefined') return;
+
+  const totals = campaigns.reduce(
+    (acc, c) => {
+      acc.queued += c.queuedCount || 0;
+      acc.sent += c.sentCount || 0;
+      acc.delivered += c.deliveredCount || 0;
+      acc.read += c.readCount || 0;
+      acc.error += c.errorCount || 0;
+      return acc;
+    },
+    { queued: 0, sent: 0, delivered: 0, read: 0, error: 0 },
+  );
+
+  const data = {
+    labels: ['Fila', 'Enviados', 'Entregues', 'Lidos', 'Erro'],
+    datasets: [
+      {
+        data: [totals.queued, totals.sent, totals.delivered, totals.read, totals.error],
+        backgroundColor: ['#aab4c8', '#5fd0ff', '#25d366', '#a855f7', '#f15c5c'],
+        borderRadius: 8,
+        maxBarThickness: 56,
+      },
+    ],
+  };
+
+  if (overviewChart) {
+    overviewChart.data = data;
+    overviewChart.update();
+    return;
+  }
+
+  overviewChart = new Chart(canvas, {
+    type: 'bar',
+    data,
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#aab4c8' } },
+        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: '#aab4c8', precision: 0 } },
+      },
+    },
+  });
+}
+
+function formatDateTime(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
 function renderCampaigns(campaigns) {
@@ -36,7 +109,7 @@ function renderCampaigns(campaigns) {
   document.getElementById('campaigns-count').textContent = `Mostrando ${campaigns.length} registro(s)`;
 
   if (campaigns.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Nenhuma campanha cadastrada ainda.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Nenhuma campanha cadastrada ainda.</td></tr>';
     return;
   }
 
@@ -46,13 +119,29 @@ function renderCampaigns(campaigns) {
       const statusClass = STATUS_CLASS[c.status] || 'badge-draft';
       const numero = c.whatsAppNumber?.displayNumber || c.whatsAppNumber?.phoneNumberId || c.whatsAppNumber?.evolutionInstanceName || '—';
       const template = c.template?.name || (c.messageText ? `${c.messageText.slice(0, 40)}${c.messageText.length > 40 ? '…' : ''}` : '—');
+      const statusSub =
+        c.status === 'QUEUED' && c.scheduledAt
+          ? `<div class="status-sub">⏱ ${formatDateTime(c.scheduledAt)}</div>`
+          : '';
+
+      const done = (c.sentCount || 0) + (c.deliveredCount || 0) + (c.readCount || 0) + (c.errorCount || 0);
+      const total = c.totalCount || 0;
+      const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+      const hasErrors = (c.errorCount || 0) > 0;
+      const progressCell =
+        total > 0
+          ? `<div class="progress-bar"><div class="progress-bar-fill ${hasErrors ? 'has-errors' : ''}" style="width:${pct}%"></div></div>
+             <div class="progress-label">${done}/${total} (${pct}%)${hasErrors ? ` · ${c.errorCount} erro(s)` : ''}</div>`
+          : `<span class="status-sub">—</span>`;
+
       return `
         <tr data-id="${c.id}">
           <td><input type="checkbox" class="row-check" data-id="${c.id}" ${selectedIds.has(c.id) ? 'checked' : ''} /></td>
-          <td><span class="badge ${statusClass}">${escapeHtml(statusLabel)}</span></td>
-          <td>${escapeHtml(c.name)}</td>
+          <td><span class="badge ${statusClass}">${escapeHtml(statusLabel)}</span>${statusSub}</td>
+          <td><button class="link-btn" data-detail="${c.id}">${escapeHtml(c.name)}</button></td>
           <td>${escapeHtml(numero)}</td>
           <td>${escapeHtml(template)}</td>
+          <td class="progress-cell">${progressCell}</td>
           <td>
             <select class="row-select" data-id="${c.id}">
               <option value="">Selecione</option>
@@ -65,6 +154,12 @@ function renderCampaigns(campaigns) {
         </tr>`;
     })
     .join('');
+
+  tbody.querySelectorAll('[data-detail]').forEach((el) => {
+    el.addEventListener('click', () => {
+      window.location.href = `campanha-detalhe.html?id=${el.dataset.detail}`;
+    });
+  });
 
   tbody.querySelectorAll('.row-check').forEach((el) => {
     el.addEventListener('change', () => {
@@ -178,6 +273,10 @@ function confirmAction(title, message, onConfirm) {
 
 document.addEventListener('DOMContentLoaded', () => {
   loadCampaigns();
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') loadCampaigns(currentSearch());
+  });
 
   setupDropdown('acoes-btn', 'acoes-menu');
   setupDropdown('exportar-btn', 'exportar-menu');

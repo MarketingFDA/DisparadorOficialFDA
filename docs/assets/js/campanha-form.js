@@ -71,6 +71,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     const body = { name, whatsAppNumberId, groupId };
+    const scheduleInput = document.getElementById('campaign-schedule').value;
+    if (scheduleInput) body.scheduledAt = new Date(scheduleInput).toISOString();
     if (channel === 'META_CLOUD_API') {
       if (!templateSelect.value) {
         showToast('Selecione um template aprovado.', 'error');
@@ -88,7 +90,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     try {
       await api.campaigns.create(body);
-      showToast('Campanha criada com sucesso!', 'success');
+      showToast(body.scheduledAt ? 'Campanha agendada com sucesso!' : 'Campanha criada com sucesso!', 'success');
       setTimeout(() => (window.location.href = 'index.html'), 800);
     } catch (err) {
       showToast(`Erro ao criar campanha: ${err.message}`, 'error');
