@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -31,6 +32,11 @@ export class ContactsController {
   @Get('groups/:id')
   findContactsByGroup(@Param('id') id: string) {
     return this.contactsService.findContactsByGroup(id);
+  }
+
+  @Delete('groups/:id')
+  removeGroup(@Param('id') id: string) {
+    return this.contactsService.removeGroup(id);
   }
 
   @Post('import')
