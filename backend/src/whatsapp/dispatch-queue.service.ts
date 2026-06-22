@@ -10,12 +10,10 @@ import { CampaignStatus, Channel, MessageStatus } from '@prisma/client';
 const META_BATCH_SIZE = 5;
 const META_DELAY_MS = 1200;
 
-// Evolution API (número normal, não-oficial): pausa adaptativa por volume de
-// mensagens já enviadas HOJE por aquele número — quanto mais mensagens, maior o
-// intervalo entre envios, simulando um padrão mais humano. Mesmo assim NÃO há
-// garantia: o número pode ser banido pelo WhatsApp a qualquer momento nesse
-// canal — ver EVOLUTION_SETUP.md. Os limiares abaixo são um ponto de partida
-// conservador, ajustável conforme a experiência de uso real.
+// Evolution API (número normal, não-oficial): várias camadas de proteção contra
+// bloqueio, nenhuma delas garante segurança sozinha — ver EVOLUTION_SETUP.md.
+
+// 1) Pausa adaptativa por volume de mensagens já enviadas HOJE por aquele número.
 interface EvolutionTier {
   upTo: number; // tier se aplica enquanto sentToday <= upTo
   minDelayMs: number;
@@ -31,9 +29,8 @@ const EVOLUTION_TIERS: EvolutionTier[] = [
   { upTo: Infinity, minDelayMs: 240_000, maxDelayMs: 360_000 }, // acima de 1000/dia: 4-6min
 ];
 
-// Pausas extras ("descanso") ao cruzar marcos de mensagens enviadas no dia.
-// O marco de 1000 se repete a cada 500 mensagens adicionais (1500, 2000, ...)
-// como rede de segurança caso o volume passe do combinado.
+// 2) Pausas extras ("descanso") ao cruzar marcos de mensagens enviadas no dia.
+// O marco de 1000 se repete a cada 500 mensagens adicionais (1500, 2000, ...).
 const EVOLUTION_CHECKPOINTS: { at: number; minMs: number; maxMs: number; repeatEvery?: number }[] = [
   { at: 20, minMs: 2 * 60_000, maxMs: 4 * 60_000 },
   { at: 50, minMs: 8 * 60_000, maxMs: 12 * 60_000 },
@@ -43,10 +40,41 @@ const EVOLUTION_CHECKPOINTS: { at: number; minMs: number; maxMs: number; repeatE
   { at: 1000, minMs: 150 * 60_000, maxMs: 240 * 60_000, repeatEvery: 500 },
 ];
 
+// 3) Aquecimento progressivo: número recém-conectado manda menos por dia,
+// independente do que a campanha tenha pendente. Mandar muito num número novo
+// é o maior gatilho de bloqueio que existe — mais importante que o timing.
+const WARMUP_CAPS: { maxDays: number; dailyCap: number }[] = [
+  { maxDays: 3, dailyCap: 40 },
+  { maxDays: 7, dailyCap: 150 },
+  { maxDays: 14, dailyCap: 400 },
+  { maxDays: Infinity, dailyCap: Infinity },
+];
+
+// 4) Janela de horário: nada de disparo de madrugada, que é padrão de bot.
+const SENDING_WINDOW_START_HOUR = 8;
+const SENDING_WINDOW_END_HOUR = 21;
+const SENDING_WINDOW_TIMEZONE = 'America/Sao_Paulo';
+
+// 5) Circuit breaker: se a taxa de falha recente for alta, pausa sozinho —
+// pode ser sinal de que o número já está sendo throttled/bloqueado.
+const CIRCUIT_BREAKER_SAMPLE_SIZE = 20;
+const CIRCUIT_BREAKER_MIN_SAMPLE = 10;
+const CIRCUIT_BREAKER_FAILURE_RATE = 0.3;
+
+// 6) "Digitando..." antes de cada envio — a Evolution API simula presença de
+// composing pelo tempo informado em vez de a mensagem aparecer instantânea.
+const TYPING_DELAY_MIN_MS = 1500;
+const TYPING_DELAY_MAX_MS = 4000;
+
 type CampaignWithRelations = {
   id: string;
   whatsAppNumberId: string;
-  whatsAppNumber: { channel: Channel; phoneNumberId: string | null; evolutionInstanceName: string | null };
+  whatsAppNumber: {
+    channel: Channel;
+    phoneNumberId: string | null;
+    evolutionInstanceName: string | null;
+    connectedAt: Date | null;
+  };
   template: { name: string; language: string } | null;
   messageText: string | null;
 };
@@ -61,6 +89,8 @@ export class DispatchQueueService {
   // pouco mais cedo logo após o backend reiniciar, o tier de delay em si continua
   // correto pois é recalculado a partir do banco a cada envio).
   private readonly nextAllowedSendAt = new Map<string, number>();
+  // Evita logar o aviso de teto de aquecimento/fora da janela a cada 5s.
+  private readonly lastSkipLogAt = new Map<string, number>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -115,28 +145,95 @@ export class DispatchQueueService {
     }
   }
 
-  // Canal Evolution: no máximo 1 envio por tick por número, respeitando a pausa
-  // adaptativa calculada após o envio anterior — não bloqueia outras campanhas
-  // (inclusive Meta) enquanto está "descansando".
+  // Canal Evolution: no máximo 1 envio por tick por número, respeitando pausa
+  // adaptativa, janela de horário e teto de aquecimento — sem bloquear outras
+  // campanhas (inclusive Meta) enquanto está "descansando" ou fora da janela.
   private async processEvolutionCampaign(campaign: CampaignWithRelations) {
-    const nextAllowed = this.nextAllowedSendAt.get(campaign.whatsAppNumberId) ?? 0;
+    const numberId = campaign.whatsAppNumberId;
+
+    const nextAllowed = this.nextAllowedSendAt.get(numberId) ?? 0;
     if (Date.now() < nextAllowed) return;
+
+    if (!this.isWithinSendingWindow()) {
+      this.logSkipOncePerHour(numberId, 'fora-da-janela', 'Fora da janela de horário de envio (8h-21h, América/São Paulo)');
+      return;
+    }
 
     const message = await this.prisma.campaignMessage.findFirst({
       where: { campaignId: campaign.id, status: MessageStatus.PENDING },
       include: { contact: true },
     });
-
     if (!message) {
       await this.completeCampaignIfDone(campaign.id);
       return;
     }
 
-    await this.sendOne(campaign, message);
+    const sentToday = await this.countSentTodayForNumber(numberId);
+    const cap = this.warmupCapFor(campaign.whatsAppNumber.connectedAt);
+    if (sentToday >= cap) {
+      this.logSkipOncePerHour(
+        numberId,
+        'teto-aquecimento',
+        `Teto de aquecimento do dia atingido (${sentToday}/${cap === Infinity ? '∞' : cap}) — retoma amanhã`,
+      );
+      return;
+    }
 
-    const sentToday = await this.countSentTodayForNumber(campaign.whatsAppNumberId);
-    const delay = this.delayForEvolutionCount(sentToday);
-    this.nextAllowedSendAt.set(campaign.whatsAppNumberId, Date.now() + delay);
+    await this.sendOne(campaign, message);
+    await this.checkCircuitBreaker(numberId);
+
+    const sentTodayAfter = sentToday + 1;
+    const delay = this.delayForEvolutionCount(sentTodayAfter);
+    this.nextAllowedSendAt.set(numberId, Date.now() + delay);
+  }
+
+  private logSkipOncePerHour(numberId: string, key: string, message: string) {
+    const mapKey = `${numberId}:${key}`;
+    const last = this.lastSkipLogAt.get(mapKey) ?? 0;
+    if (Date.now() - last > 60 * 60_000) {
+      this.logger.log(`[${numberId}] ${message}`);
+      this.lastSkipLogAt.set(mapKey, Date.now());
+    }
+  }
+
+  private isWithinSendingWindow(): boolean {
+    const hour = Number(
+      new Intl.DateTimeFormat('en-US', {
+        hour: 'numeric',
+        hour12: false,
+        timeZone: SENDING_WINDOW_TIMEZONE,
+      }).format(new Date()),
+    ) % 24;
+    return hour >= SENDING_WINDOW_START_HOUR && hour < SENDING_WINDOW_END_HOUR;
+  }
+
+  private warmupCapFor(connectedAt: Date | null): number {
+    const daysSinceConnected = connectedAt ? (Date.now() - connectedAt.getTime()) / (24 * 60 * 60_000) : 0;
+    const tier = WARMUP_CAPS.find((t) => daysSinceConnected <= t.maxDays) ?? WARMUP_CAPS[WARMUP_CAPS.length - 1];
+    return tier.dailyCap;
+  }
+
+  private async checkCircuitBreaker(whatsAppNumberId: string) {
+    const recent = await this.prisma.campaignMessage.findMany({
+      where: {
+        campaign: { whatsAppNumberId },
+        status: { in: [MessageStatus.SENT, MessageStatus.FAILED] },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: CIRCUIT_BREAKER_SAMPLE_SIZE,
+    });
+    if (recent.length < CIRCUIT_BREAKER_MIN_SAMPLE) return;
+
+    const failures = recent.filter((m) => m.status === MessageStatus.FAILED).length;
+    if (failures / recent.length >= CIRCUIT_BREAKER_FAILURE_RATE) {
+      this.logger.warn(
+        `Taxa de erro alta (${failures}/${recent.length}) no número ${whatsAppNumberId} — pausando campanhas automaticamente (possível sinal de bloqueio/throttling pelo WhatsApp)`,
+      );
+      await this.prisma.campaign.updateMany({
+        where: { whatsAppNumberId, status: CampaignStatus.SENDING },
+        data: { status: CampaignStatus.PAUSED },
+      });
+    }
   }
 
   private async completeCampaignIfDone(campaignId: string) {
@@ -251,6 +348,7 @@ export class DispatchQueueService {
       instanceName: campaign.whatsAppNumber.evolutionInstanceName,
       toPhoneE164: message.contact.phone,
       text,
+      delayMs: this.randomBetween(TYPING_DELAY_MIN_MS, TYPING_DELAY_MAX_MS),
     });
     return result.externalMessageId;
   }

@@ -48,6 +48,9 @@ model WhatsAppNumber {
 
   // Evolution API (canal não-oficial, número normal)
   evolutionInstanceName String?
+  // Primeira vez que a conexão chegou a "open" — usado para aquecimento
+  // progressivo (teto diário de mensagens cresce com a idade da conexão).
+  connectedAt            DateTime?
 
   displayNumber String?
   isTestNumber  Boolean    @default(true)

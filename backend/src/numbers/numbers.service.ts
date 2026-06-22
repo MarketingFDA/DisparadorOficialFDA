@@ -91,7 +91,11 @@ export class NumbersService {
 
   async getConnectionState(id: string) {
     const number = await this.findEvolutionNumber(id);
-    return this.evolution.getConnectionState(number.evolutionInstanceName!);
+    const result = await this.evolution.getConnectionState(number.evolutionInstanceName!);
+    if (result.state === 'open' && !number.connectedAt) {
+      await this.prisma.whatsAppNumber.update({ where: { id }, data: { connectedAt: new Date() } });
+    }
+    return result;
   }
 
   private async findEvolutionNumber(id: string) {

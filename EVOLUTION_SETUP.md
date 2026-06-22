@@ -75,6 +75,24 @@ Os limiares estão em `EVOLUTION_TIERS`/`EVOLUTION_CHECKPOINTS` no topo de `back
 
 **Importante sobre volumes de centenas/milhares por dia:** pacing reduz o risco de detecção por padrão de tempo, mas o WhatsApp também considera taxa de bloqueio/denúncia de quem recebe, conteúdo repetido, idade do número, entre outros sinais. Em volumes de 100-1000 mensagens/dia num número pessoal/comum, o risco de banimento é real mesmo com esse escalonamento — não há configuração de delay que torne isso "seguro". Para volume alto e previsível, o canal Meta Oficial (que não tem esse risco, mas exige template aprovado) é a opção mais adequada.
 
+## Outras camadas de proteção contra bloqueio
+
+Além da pausa adaptativa, o canal Evolution tem mais quatro proteções (todas em `dispatch-queue.service.ts`):
+
+1. **"Digitando..." antes de cada envio** — a Evolution API mostra presença de composing por 1,5-4s (aleatório) antes da mensagem aparecer, em vez de aparecer instantânea (parâmetro `delay` nativo da API, simula digitação humana).
+2. **Janela de horário** — só envia entre 8h e 21h (horário de Brasília); fora disso, a campanha fica esperando sem mandar nada. Disparo de madrugada é um padrão clássico de bot.
+3. **Aquecimento progressivo por idade da conexão** — um número recém-conectado tem teto diário bem menor, independente do volume da campanha:
+
+   | Dias desde a 1ª conexão (QR Code escaneado) | Teto de mensagens/dia |
+   |---|---|
+   | 0-3 dias | 40 |
+   | 4-7 dias | 150 |
+   | 8-14 dias | 400 |
+   | 15+ dias | sem teto adicional (só os patamares de pausa acima) |
+
+   A data da 1ª conexão é gravada automaticamente (`WhatsAppNumber.connectedAt`) na primeira vez que o status do número aparece como "open". Esse é, segundo a experiência da comunidade Baileys/Evolution API, o fator que mais reduz risco de banimento — mais até que o timing entre mensagens. A tela "Números" mostra "há Xd · teto hoje: Y/dia" para cada número do canal Evolution.
+4. **Circuit breaker automático** — se das últimas 20 mensagens enviadas/tentadas num número, 30% ou mais falharem, todas as campanhas SENDING daquele número são pausadas automaticamente (status muda para "Pausado"). Taxa de erro alta de repente costuma ser sinal de que o número já está sendo limitado ou bloqueado pelo WhatsApp — ver os logs do backend no Render para confirmar.
+
 ## Limitações conhecidas dessa primeira versão
 
 - Não há rastreamento automático de entrega/leitura para esse canal (webhooks da Evolution API não estão conectados ainda) — as mensagens ficam marcadas como "Enviado" ou "Erro", sem `DELIVERED`/`READ`.

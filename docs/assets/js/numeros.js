@@ -81,7 +81,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const identifier = isMeta ? (n.phoneNumberId || '—') : (n.evolutionInstanceName || '—');
                 const statusCell = isMeta
                   ? '<span class="field-hint">—</span>'
-                  : `<span class="badge" data-status-for="${n.id}">verificando…</span>`;
+                  : `<span class="badge" data-status-for="${n.id}">verificando…</span><div class="field-hint" data-warmup-for="${n.id}"></div>`;
                 const connectBtn = isMeta ? '' : `<button type="button" class="btn btn-secondary btn-connect" data-id="${n.id}">Conectar</button>`;
                 const actionsCell = `${connectBtn}<button type="button" class="btn btn-ghost btn-remove" data-id="${n.id}" data-label="${escapeHtml(n.label)}">Excluir</button>`;
                 return `
@@ -119,6 +119,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         .filter((n) => n.channel === 'EVOLUTION_API')
         .forEach(async (n) => {
           const el = tbody.querySelector(`[data-status-for="${n.id}"]`);
+          const warmupEl = tbody.querySelector(`[data-warmup-for="${n.id}"]`);
           if (!el) return;
           try {
             const { state } = await api.numbers.status(n.id);
@@ -126,6 +127,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const [label, cls] = map[state] || ['Desconectado', 'badge-status-close'];
             el.textContent = label;
             el.className = `badge ${cls}`;
+            if (warmupEl) warmupEl.textContent = warmupLabel(n.connectedAt);
           } catch {
             el.textContent = 'Erro ao checar';
             el.className = 'badge badge-status-close';
@@ -134,6 +136,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (err) {
       tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Erro ao carregar números: ${escapeHtml(err.message)}</td></tr>`;
     }
+  }
+
+  function warmupLabel(connectedAt) {
+    if (!connectedAt) return 'aquecimento: aguardando 1ª conexão';
+    const days = Math.floor((Date.now() - new Date(connectedAt).getTime()) / 86400000);
+    const cap = days <= 3 ? 40 : days <= 7 ? 150 : days <= 14 ? 400 : null;
+    return cap ? `há ${days}d · teto hoje: ${cap}/dia` : `há ${days}d · sem teto de aquecimento`;
   }
 
   function toggleChannelFields() {

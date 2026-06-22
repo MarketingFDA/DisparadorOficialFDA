@@ -5,6 +5,9 @@ export interface SendTextParams {
   instanceName: string;
   toPhoneE164: string;
   text: string;
+  // ms que a Evolution API mostra "digitando..." antes de enviar — simula
+  // comportamento humano em vez de a mensagem aparecer instantaneamente.
+  delayMs?: number;
 }
 
 export interface SendTextResult {
@@ -51,6 +54,7 @@ export class EvolutionApiService {
     const { data } = await this.client.post(`/message/sendText/${params.instanceName}`, {
       number: params.toPhoneE164,
       text: params.text,
+      delay: params.delayMs,
     });
 
     const externalMessageId = data?.key?.id;
