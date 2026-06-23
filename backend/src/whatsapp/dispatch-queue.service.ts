@@ -32,14 +32,12 @@ const SENDING_WINDOW_START_HOUR = 8;
 const SENDING_WINDOW_END_HOUR = 21;
 const SENDING_WINDOW_TIMEZONE = 'America/Sao_Paulo';
 
-// 4) Circuit breaker: se a taxa de falha recente for alta, NÃO pausa a campanha
-// (exigiria retomada manual) — em vez disso aplica um resfriamento extra no
-// próximo envio, desacelerando bastante sem nunca parar de enviar.
+// 4) Circuit breaker: se a taxa de falha recente for alta, só loga um alerta
+// (possível bloqueio/throttling pelo WhatsApp) — não pausa nem desacelera mais
+// o envio, a pedido do usuário (sempre 20s entre mensagens, mesmo com erro alto).
 const CIRCUIT_BREAKER_SAMPLE_SIZE = 20;
 const CIRCUIT_BREAKER_MIN_SAMPLE = 10;
 const CIRCUIT_BREAKER_FAILURE_RATE = 0.3;
-const CIRCUIT_BREAKER_COOLDOWN_MIN_MS = 15 * 60_000; // 15min
-const CIRCUIT_BREAKER_COOLDOWN_MAX_MS = 30 * 60_000; // 30min
 
 // 5) "Digitando..." antes de cada envio — a Evolution API simula presença de
 // composing pelo tempo informado em vez de a mensagem aparecer instantânea.
@@ -195,13 +193,12 @@ export class DispatchQueueService {
     }
 
     await this.sendOne(campaign, message);
-    const circuitBreakerTriggered = await this.checkCircuitBreaker(numberId);
+    // Mantém o log de alerta (visibilidade de possível bloqueio/throttling), mas
+    // não aplica mais resfriamento extra — pedido do usuário: sempre 20s, mesmo
+    // com taxa de erro alta.
+    await this.checkCircuitBreaker(numberId);
 
-    let delay = EVOLUTION_MESSAGE_DELAY_MS;
-    if (circuitBreakerTriggered) {
-      delay += this.randomBetween(CIRCUIT_BREAKER_COOLDOWN_MIN_MS, CIRCUIT_BREAKER_COOLDOWN_MAX_MS);
-    }
-    this.nextAllowedSendAt.set(numberId, Date.now() + delay);
+    this.nextAllowedSendAt.set(numberId, Date.now() + EVOLUTION_MESSAGE_DELAY_MS);
   }
 
   private logSkipOncePerHour(numberId: string, key: string, message: string) {
@@ -246,7 +243,7 @@ export class DispatchQueueService {
     const failures = recent.filter((m) => m.status === MessageStatus.FAILED).length;
     if (failures / recent.length >= CIRCUIT_BREAKER_FAILURE_RATE) {
       this.logger.warn(
-        `Taxa de erro alta (${failures}/${recent.length}) no número ${whatsAppNumberId} — desacelerando envio (possível sinal de bloqueio/throttling pelo WhatsApp), sem pausar a campanha`,
+        `Taxa de erro alta (${failures}/${recent.length}) no número ${whatsAppNumberId} — possível sinal de bloqueio/throttling pelo WhatsApp (envio continua sem desacelerar)`,
       );
       return true;
     }
