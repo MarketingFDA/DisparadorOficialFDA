@@ -13,34 +13,11 @@ const META_DELAY_MS = 1200;
 // Evolution API (número normal, não-oficial): várias camadas de proteção contra
 // bloqueio, nenhuma delas garante segurança sozinha — ver EVOLUTION_SETUP.md.
 
-// 1) Pausa adaptativa por volume de mensagens já enviadas HOJE por aquele número.
-interface EvolutionTier {
-  upTo: number; // tier se aplica enquanto sentToday <= upTo
-  minDelayMs: number;
-  maxDelayMs: number;
-}
-const EVOLUTION_TIERS: EvolutionTier[] = [
-  { upTo: 20, minDelayMs: 10_000, maxDelayMs: 18_000 }, // até 20 msgs/dia: 10-18s entre envios
-  { upTo: 50, minDelayMs: 20_000, maxDelayMs: 30_000 }, // 21-50 msgs/dia: 20-30s
-  { upTo: 100, minDelayMs: 35_000, maxDelayMs: 50_000 }, // 51-100 msgs/dia: 35-50s
-  { upTo: 300, minDelayMs: 60_000, maxDelayMs: 90_000 }, // 101-300 msgs/dia: 1-1.5min
-  { upTo: 600, minDelayMs: 90_000, maxDelayMs: 150_000 }, // 301-600 msgs/dia: 1.5-2.5min
-  { upTo: 1000, minDelayMs: 150_000, maxDelayMs: 240_000 }, // 601-1000 msgs/dia: 2.5-4min
-  { upTo: Infinity, minDelayMs: 240_000, maxDelayMs: 360_000 }, // acima de 1000/dia: 4-6min
-];
+// 1) Intervalo fixo entre envios — pedido explícito do usuário pra parar de
+// escalar com o volume do dia (era 10s a 6min dependendo de sentToday).
+const EVOLUTION_MESSAGE_DELAY_MS = 20_000;
 
-// 2) Pausas extras ("descanso") ao cruzar marcos de mensagens enviadas no dia.
-// O marco de 1000 se repete a cada 500 mensagens adicionais (1500, 2000, ...).
-const EVOLUTION_CHECKPOINTS: { at: number; minMs: number; maxMs: number; repeatEvery?: number }[] = [
-  { at: 20, minMs: 2 * 60_000, maxMs: 4 * 60_000 },
-  { at: 50, minMs: 8 * 60_000, maxMs: 12 * 60_000 },
-  { at: 100, minMs: 20 * 60_000, maxMs: 30 * 60_000 },
-  { at: 300, minMs: 45 * 60_000, maxMs: 75 * 60_000 },
-  { at: 600, minMs: 75 * 60_000, maxMs: 120 * 60_000 },
-  { at: 1000, minMs: 150 * 60_000, maxMs: 240 * 60_000, repeatEvery: 500 },
-];
-
-// 3) Aquecimento progressivo: número recém-conectado manda menos por dia,
+// 2) Aquecimento progressivo: número recém-conectado manda menos por dia,
 // independente do que a campanha tenha pendente. Mandar muito num número novo
 // é o maior gatilho de bloqueio que existe — mais importante que o timing.
 const WARMUP_CAPS: { maxDays: number; dailyCap: number }[] = [
@@ -50,12 +27,12 @@ const WARMUP_CAPS: { maxDays: number; dailyCap: number }[] = [
   { maxDays: Infinity, dailyCap: Infinity },
 ];
 
-// 4) Janela de horário: nada de disparo de madrugada, que é padrão de bot.
+// 3) Janela de horário: nada de disparo de madrugada, que é padrão de bot.
 const SENDING_WINDOW_START_HOUR = 8;
 const SENDING_WINDOW_END_HOUR = 21;
 const SENDING_WINDOW_TIMEZONE = 'America/Sao_Paulo';
 
-// 5) Circuit breaker: se a taxa de falha recente for alta, NÃO pausa a campanha
+// 4) Circuit breaker: se a taxa de falha recente for alta, NÃO pausa a campanha
 // (exigiria retomada manual) — em vez disso aplica um resfriamento extra no
 // próximo envio, desacelerando bastante sem nunca parar de enviar.
 const CIRCUIT_BREAKER_SAMPLE_SIZE = 20;
@@ -64,7 +41,7 @@ const CIRCUIT_BREAKER_FAILURE_RATE = 0.3;
 const CIRCUIT_BREAKER_COOLDOWN_MIN_MS = 15 * 60_000; // 15min
 const CIRCUIT_BREAKER_COOLDOWN_MAX_MS = 30 * 60_000; // 30min
 
-// 6) "Digitando..." antes de cada envio — a Evolution API simula presença de
+// 5) "Digitando..." antes de cada envio — a Evolution API simula presença de
 // composing pelo tempo informado em vez de a mensagem aparecer instantânea.
 const TYPING_DELAY_MIN_MS = 1500;
 const TYPING_DELAY_MAX_MS = 4000;
@@ -220,8 +197,7 @@ export class DispatchQueueService {
     await this.sendOne(campaign, message);
     const circuitBreakerTriggered = await this.checkCircuitBreaker(numberId);
 
-    const sentTodayAfter = sentToday + 1;
-    let delay = this.delayForEvolutionCount(sentTodayAfter);
+    let delay = EVOLUTION_MESSAGE_DELAY_MS;
     if (circuitBreakerTriggered) {
       delay += this.randomBetween(CIRCUIT_BREAKER_COOLDOWN_MIN_MS, CIRCUIT_BREAKER_COOLDOWN_MAX_MS);
     }
@@ -298,23 +274,6 @@ export class DispatchQueueService {
         OR: [{ sentAt: { gte: startOfDay } }, { failedAt: { gte: startOfDay } }],
       },
     });
-  }
-
-  private delayForEvolutionCount(sentToday: number): number {
-    const tier = EVOLUTION_TIERS.find((t) => sentToday <= t.upTo) ?? EVOLUTION_TIERS[EVOLUTION_TIERS.length - 1];
-    let delay = this.randomBetween(tier.minDelayMs, tier.maxDelayMs);
-
-    for (const checkpoint of EVOLUTION_CHECKPOINTS) {
-      const crossed =
-        sentToday === checkpoint.at ||
-        (checkpoint.repeatEvery !== undefined &&
-          sentToday > checkpoint.at &&
-          (sentToday - checkpoint.at) % checkpoint.repeatEvery === 0);
-      if (crossed) {
-        delay += this.randomBetween(checkpoint.minMs, checkpoint.maxMs);
-      }
-    }
-    return delay;
   }
 
   private randomBetween(min: number, max: number): number {
