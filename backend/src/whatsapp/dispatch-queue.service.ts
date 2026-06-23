@@ -17,29 +17,19 @@ const META_DELAY_MS = 1200;
 // escalar com o volume do dia (era 10s a 6min dependendo de sentToday).
 const EVOLUTION_MESSAGE_DELAY_MS = 20_000;
 
-// 2) Aquecimento progressivo: número recém-conectado manda menos por dia,
-// independente do que a campanha tenha pendente. Mandar muito num número novo
-// é o maior gatilho de bloqueio que existe — mais importante que o timing.
-const WARMUP_CAPS: { maxDays: number; dailyCap: number }[] = [
-  { maxDays: 3, dailyCap: 40 },
-  { maxDays: 7, dailyCap: 150 },
-  { maxDays: 14, dailyCap: 400 },
-  { maxDays: Infinity, dailyCap: Infinity },
-];
-
-// 3) Janela de horário: nada de disparo de madrugada, que é padrão de bot.
+// 2) Janela de horário: nada de disparo de madrugada, que é padrão de bot.
 const SENDING_WINDOW_START_HOUR = 8;
 const SENDING_WINDOW_END_HOUR = 21;
 const SENDING_WINDOW_TIMEZONE = 'America/Sao_Paulo';
 
-// 4) Circuit breaker: se a taxa de falha recente for alta, só loga um alerta
+// 3) Circuit breaker: se a taxa de falha recente for alta, só loga um alerta
 // (possível bloqueio/throttling pelo WhatsApp) — não pausa nem desacelera mais
 // o envio, a pedido do usuário (sempre 20s entre mensagens, mesmo com erro alto).
 const CIRCUIT_BREAKER_SAMPLE_SIZE = 20;
 const CIRCUIT_BREAKER_MIN_SAMPLE = 10;
 const CIRCUIT_BREAKER_FAILURE_RATE = 0.3;
 
-// 5) "Digitando..." antes de cada envio — a Evolution API simula presença de
+// 4) "Digitando..." antes de cada envio — a Evolution API simula presença de
 // composing pelo tempo informado em vez de a mensagem aparecer instantânea.
 const TYPING_DELAY_MIN_MS = 1500;
 const TYPING_DELAY_MAX_MS = 4000;
@@ -159,8 +149,9 @@ export class DispatchQueueService {
   }
 
   // Canal Evolution: no máximo 1 envio por tick por número, respeitando pausa
-  // adaptativa, janela de horário e teto de aquecimento — sem bloquear outras
-  // campanhas (inclusive Meta) enquanto está "descansando" ou fora da janela.
+  // adaptativa e janela de horário — sem bloquear outras campanhas (inclusive
+  // Meta) enquanto está "descansando" ou fora da janela. Sem teto de
+  // aquecimento diário — a pedido do usuário, vai sem parar.
   private async processEvolutionCampaign(campaign: CampaignWithRelations) {
     const numberId = campaign.whatsAppNumberId;
 
@@ -178,17 +169,6 @@ export class DispatchQueueService {
     });
     if (!message) {
       await this.completeCampaignIfDone(campaign.id);
-      return;
-    }
-
-    const sentToday = await this.countSentTodayForNumber(numberId);
-    const cap = this.warmupCapFor(campaign.whatsAppNumber.connectedAt);
-    if (sentToday >= cap) {
-      this.logSkipOncePerHour(
-        numberId,
-        'teto-aquecimento',
-        `Teto de aquecimento do dia atingido (${sentToday}/${cap === Infinity ? '∞' : cap}) — retoma amanhã`,
-      );
       return;
     }
 
@@ -219,12 +199,6 @@ export class DispatchQueueService {
       }).format(new Date()),
     ) % 24;
     return hour >= SENDING_WINDOW_START_HOUR && hour < SENDING_WINDOW_END_HOUR;
-  }
-
-  private warmupCapFor(connectedAt: Date | null): number {
-    const daysSinceConnected = connectedAt ? (Date.now() - connectedAt.getTime()) / (24 * 60 * 60_000) : 0;
-    const tier = WARMUP_CAPS.find((t) => daysSinceConnected <= t.maxDays) ?? WARMUP_CAPS[WARMUP_CAPS.length - 1];
-    return tier.dailyCap;
   }
 
   // Retorna true se a taxa de falha recente estiver alta — quem chama aplica um
@@ -260,17 +234,6 @@ export class DispatchQueueService {
         data: { status: CampaignStatus.COMPLETED, finishedAt: new Date() },
       });
     }
-  }
-
-  private async countSentTodayForNumber(whatsAppNumberId: string): Promise<number> {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    return this.prisma.campaignMessage.count({
-      where: {
-        campaign: { whatsAppNumberId },
-        OR: [{ sentAt: { gte: startOfDay } }, { failedAt: { gte: startOfDay } }],
-      },
-    });
   }
 
   private randomBetween(min: number, max: number): number {

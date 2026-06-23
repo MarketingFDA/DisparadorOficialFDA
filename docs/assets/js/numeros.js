@@ -139,10 +139,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function warmupLabel(connectedAt) {
-    if (!connectedAt) return 'aquecimento: aguardando 1ª conexão';
+    if (!connectedAt) return 'aguardando 1ª conexão';
     const days = Math.floor((Date.now() - new Date(connectedAt).getTime()) / 86400000);
-    const cap = days <= 3 ? 40 : days <= 7 ? 150 : days <= 14 ? 400 : null;
-    return cap ? `há ${days}d · teto hoje: ${cap}/dia` : `há ${days}d · sem teto de aquecimento`;
+    return `conectado há ${days}d`;
   }
 
   function toggleChannelFields() {
