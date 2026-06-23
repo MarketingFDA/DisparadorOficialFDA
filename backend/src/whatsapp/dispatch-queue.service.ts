@@ -17,19 +17,29 @@ const META_DELAY_MS = 1200;
 // escalar com o volume do dia (era 10s a 6min dependendo de sentToday).
 const EVOLUTION_MESSAGE_DELAY_MS = 20_000;
 
-// 2) Janela de horário: nada de disparo de madrugada, que é padrão de bot.
+// 2) Teto de aquecimento diário (mais leve que a versão anterior, de 40/dia —
+// essa travou em pouco volume e tirar o teto inteiramente levou a um bloqueio
+// real do número pelo WhatsApp). Reseta na meia-noite de São Paulo, não na
+// meia-noite UTC do servidor (bug da versão anterior).
+const WARMUP_CAPS: { maxDays: number; dailyCap: number }[] = [
+  { maxDays: 3, dailyCap: 120 },
+  { maxDays: 7, dailyCap: 300 },
+  { maxDays: Infinity, dailyCap: Infinity },
+];
+
+// 3) Janela de horário: nada de disparo de madrugada, que é padrão de bot.
 const SENDING_WINDOW_START_HOUR = 8;
 const SENDING_WINDOW_END_HOUR = 21;
 const SENDING_WINDOW_TIMEZONE = 'America/Sao_Paulo';
 
-// 3) Circuit breaker: se a taxa de falha recente for alta, só loga um alerta
+// 4) Circuit breaker: se a taxa de falha recente for alta, só loga um alerta
 // (possível bloqueio/throttling pelo WhatsApp) — não pausa nem desacelera mais
 // o envio, a pedido do usuário (sempre 20s entre mensagens, mesmo com erro alto).
 const CIRCUIT_BREAKER_SAMPLE_SIZE = 20;
 const CIRCUIT_BREAKER_MIN_SAMPLE = 10;
 const CIRCUIT_BREAKER_FAILURE_RATE = 0.3;
 
-// 4) "Digitando..." antes de cada envio — a Evolution API simula presença de
+// 5) "Digitando..." antes de cada envio — a Evolution API simula presença de
 // composing pelo tempo informado em vez de a mensagem aparecer instantânea.
 const TYPING_DELAY_MIN_MS = 1500;
 const TYPING_DELAY_MAX_MS = 4000;
@@ -172,6 +182,17 @@ export class DispatchQueueService {
       return;
     }
 
+    const sentToday = await this.countSentTodayForNumber(numberId);
+    const cap = this.warmupCapFor(campaign.whatsAppNumber.connectedAt);
+    if (sentToday >= cap) {
+      this.logSkipOncePerHour(
+        numberId,
+        'teto-aquecimento',
+        `Teto de aquecimento do dia atingido (${sentToday}/${cap === Infinity ? '∞' : cap}) — retoma à meia-noite (horário de Brasília)`,
+      );
+      return;
+    }
+
     await this.sendOne(campaign, message);
     // Mantém o log de alerta (visibilidade de possível bloqueio/throttling), mas
     // não aplica mais resfriamento extra — pedido do usuário: sempre 20s, mesmo
@@ -199,6 +220,34 @@ export class DispatchQueueService {
       }).format(new Date()),
     ) % 24;
     return hour >= SENDING_WINDOW_START_HOUR && hour < SENDING_WINDOW_END_HOUR;
+  }
+
+  private warmupCapFor(connectedAt: Date | null): number {
+    const daysSinceConnected = connectedAt ? (Date.now() - connectedAt.getTime()) / (24 * 60 * 60_000) : 0;
+    const tier = WARMUP_CAPS.find((t) => daysSinceConnected <= t.maxDays) ?? WARMUP_CAPS[WARMUP_CAPS.length - 1];
+    return tier.dailyCap;
+  }
+
+  // "Hoje" no horário de Brasília, não no fuso do servidor (Render roda em UTC) —
+  // a versão anterior resetava o teto na meia-noite UTC, 21h em Brasília.
+  private startOfTodayInSaoPaulo(): Date {
+    const ymd = new Intl.DateTimeFormat('en-CA', {
+      timeZone: SENDING_WINDOW_TIMEZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    return new Date(`${ymd}T00:00:00-03:00`);
+  }
+
+  private async countSentTodayForNumber(whatsAppNumberId: string): Promise<number> {
+    const startOfDay = this.startOfTodayInSaoPaulo();
+    return this.prisma.campaignMessage.count({
+      where: {
+        campaign: { whatsAppNumberId },
+        OR: [{ sentAt: { gte: startOfDay } }, { failedAt: { gte: startOfDay } }],
+      },
+    });
   }
 
   // Retorna true se a taxa de falha recente estiver alta — quem chama aplica um
